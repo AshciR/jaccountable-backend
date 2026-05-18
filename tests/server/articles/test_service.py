@@ -14,6 +14,7 @@ from src.server.articles.service import ArticleSearchService
 from tests.article_persistence.utils import (
     create_test_article_entity,
     create_test_entity,
+    delete_article,
 )
 
 
@@ -1028,3 +1029,225 @@ class TestArticleSearchServiceCaching:
         # Then: results are returned normally
         assert total >= 1
         assert any(r.url == "https://example.com/cache-none" for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Article detail tests
+# ---------------------------------------------------------------------------
+
+
+class TestArticleDetailService:
+    """ArticleSearchService.get_by_public_id() — fetch a single article by UUID."""
+
+    async def test_get_by_public_id_returns_article(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with known content
+        expected_text = "Full content for detail test."
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/detail-basic",
+            title="Detail basic article",
+            full_text=expected_text,
+        )
+        service = ArticleSearchService()
+
+        # When: we fetch by public_id
+        result = await service.get_by_public_id(db_connection, article.public_id)
+
+        # Then: the correct article is returned with full_text populated
+        assert result is not None
+        assert result.url == "https://example.com/detail-basic"
+        assert result.title == "Detail basic article"
+        assert result.full_text == expected_text
+
+    async def test_get_by_public_id_not_found_returns_none(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: a UUID that does not exist in the database
+        from uuid import uuid4
+        non_existent = uuid4()
+        service = ArticleSearchService()
+
+        # When: we fetch by that UUID
+        result = await service.get_by_public_id(db_connection, non_existent)
+
+        # Then: None is returned
+        assert result is None
+
+    async def test_get_by_public_id_snippet_is_none(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/detail-snippet",
+            title="Snippet detail article",
+            full_text="Content.",
+        )
+        service = ArticleSearchService()
+
+        # When: we fetch by public_id
+        result = await service.get_by_public_id(db_connection, article.public_id)
+
+        # Then: snippet is None (it is a search artifact, not relevant to detail view)
+        assert result is not None
+        assert result.snippet is None
+
+    async def test_get_by_public_id_entities_aggregated(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article linked to two entities
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/detail-entities",
+            title="Detail entities article",
+            full_text="Content.",
+        )
+        e1 = await create_test_entity(db_connection, name="Petrojam", normalized_name="petrojam")
+        e2 = await create_test_entity(db_connection, name="INDECOM", normalized_name="indecom")
+        await create_test_article_entity(db_connection, article.id, e1.id)
+        await create_test_article_entity(db_connection, article.id, e2.id)
+        service = ArticleSearchService()
+
+        # When: we fetch by public_id
+        result = await service.get_by_public_id(db_connection, article.public_id)
+
+        # Then: both entities appear in the result
+        assert result is not None
+        assert "Petrojam" in result.entities
+        assert "INDECOM" in result.entities
+
+    async def test_get_by_public_id_classifications_aggregated(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with two classifications
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/detail-classifications",
+            title="Detail classifications article",
+            full_text="Content.",
+        )
+        await _insert_classification(db_connection, article.id, classifier_type="CORRUPTION", confidence_score=0.9)
+        await _insert_classification(db_connection, article.id, classifier_type="HURRICANE_RELIEF", confidence_score=0.7)
+        service = ArticleSearchService()
+
+        # When: we fetch by public_id
+        result = await service.get_by_public_id(db_connection, article.public_id)
+
+        # Then: both classifications are returned
+        assert result is not None
+        assert len(result.classifications) == 2
+        types = {c.classifier_type for c in result.classifications}
+        assert "CORRUPTION" in types
+        assert "HURRICANE_RELIEF" in types
+
+    async def test_get_by_public_id_no_entities_returns_empty_list(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with no linked entities
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/detail-no-entities",
+            title="No entities detail article",
+            full_text="Content.",
+        )
+        service = ArticleSearchService()
+
+        # When: we fetch by public_id
+        result = await service.get_by_public_id(db_connection, article.public_id)
+
+        # Then: entities is an empty list, not None
+        assert result is not None
+        assert result.entities == []
+
+    async def test_get_by_public_id_no_classifications_returns_empty_list(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with no classifications
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/detail-no-classifications",
+            title="No classifications detail article",
+            full_text="Content.",
+        )
+        service = ArticleSearchService()
+
+        # When: we fetch by public_id
+        result = await service.get_by_public_id(db_connection, article.public_id)
+
+        # Then: classifications is an empty list, not None
+        assert result is not None
+        assert result.classifications == []
+
+    async def test_get_by_public_id_populates_cache_on_miss(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article and a fresh cache
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/detail-cache-miss",
+            title="Detail cache miss article",
+            full_text="Content.",
+        )
+        cache = InMemoryCache()
+        service = ArticleSearchService(cache=cache)
+
+        # When: we fetch by public_id for the first time
+        await service.get_by_public_id(db_connection, article.public_id)
+
+        # Then: the result is now in the cache
+        assert cache.size() == 1
+
+    async def test_get_by_public_id_returns_cached_result(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article cached by a first fetch
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/detail-cache-hit",
+            title="Detail cache hit article",
+            full_text="Content.",
+        )
+        cache = InMemoryCache()
+        service = ArticleSearchService(cache=cache)
+        await service.get_by_public_id(db_connection, article.public_id)
+
+        # And: the article is then deleted from the DB
+        await delete_article(db_connection, article.id)
+
+        # When: we fetch again
+        result = await service.get_by_public_id(db_connection, article.public_id)
+
+        # Then: the result is returned from cache (not the now-deleted DB row)
+        assert result is not None
+        assert result.url == "https://example.com/detail-cache-hit"
+
+    async def test_get_by_public_id_without_cache_still_returns_result(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article and a service with no cache
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/detail-no-cache",
+            title="Detail no cache article",
+            full_text="Content.",
+        )
+        service = ArticleSearchService(cache=None)
+
+        # When: we fetch by public_id
+        result = await service.get_by_public_id(db_connection, article.public_id)
+
+        # Then: the article is returned normally
+        assert result is not None
+        assert result.url == "https://example.com/detail-no-cache"

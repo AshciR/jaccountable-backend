@@ -134,6 +134,25 @@ class ArticleRepository:
             news_source_id=result['news_source_id'],
         )
 
+    async def get_article_detail_by_public_id(
+        self,
+        conn: asyncpg.Connection,
+        public_id: UUID,
+    ) -> ArticleSearchResult | None:
+        """Retrieve a single article with aggregated entities and classifications.
+
+        Args:
+            conn: Database connection to use for the query
+            public_id: The public UUID of the article
+
+        Returns:
+            ArticleSearchResult if found (full_text populated, snippet=None), else None
+        """
+        row = await self.queries.get_article_detail_by_public_id(conn, public_id=public_id)
+        if row is None:
+            return None
+        return _row_to_search_result(row)
+
     async def search_articles(
         self,
         conn: asyncpg.Connection,
