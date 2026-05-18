@@ -1,8 +1,9 @@
 """HTTP router for the articles domain."""
 from typing import Annotated
+from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from src.analytics.client import AnalyticsClient
 from src.server.articles.schemas import (
@@ -39,6 +40,18 @@ async def search_articles(
         page=params.page,
         page_size=params.page_size,
     )
+
+
+@router.get("/{public_id}", response_model=ArticleSearchResultSchema)
+async def get_article(
+    public_id: UUID,
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    service: Annotated[ArticleSearchService, Depends(_get_service)],
+) -> ArticleSearchResultSchema:
+    result = await service.get_by_public_id(conn, public_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return ArticleSearchResultSchema.model_validate(result)
 
 
 def _capture_search_event(

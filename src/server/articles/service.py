@@ -1,5 +1,6 @@
 """Service layer for article search."""
 import json
+from uuid import UUID
 
 import asyncpg
 
@@ -67,6 +68,29 @@ class ArticleSearchService:
         await self._set_cached(params, results, total)
 
         return results, total
+
+    async def get_by_public_id(
+        self,
+        conn: asyncpg.Connection,
+        public_id: UUID,
+    ) -> ArticleSearchResult | None:
+        """Fetch a single article by public UUID, with entities and classifications."""
+        if self._cache is None:
+            return await self._repo.get_article_detail_by_public_id(conn, public_id)
+
+        cache_key = f"article:detail:{public_id}"
+        raw = await self._cache.get(cache_key)
+        if raw:
+            return ArticleSearchResult.model_validate(json.loads(raw))
+
+        result = await self._repo.get_article_detail_by_public_id(conn, public_id)
+        if result is not None:
+            await self._cache.set(
+                cache_key,
+                json.dumps(result.model_dump(mode="json")),
+                ttl_seconds=300,
+            )
+        return result
 
     async def _get_cached(
         self,

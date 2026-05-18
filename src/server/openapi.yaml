@@ -116,6 +116,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /articles/{public_id}:
+    get:
+      summary: Get article by ID
+      description: Retrieve a single article by its public UUID, with full text, entities, and classifications.
+      operationId: getArticle
+      tags:
+        - Articles
+      parameters:
+        - name: public_id
+          in: path
+          required: true
+          description: Public UUID of the article
+          schema:
+            type: string
+            format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+
+      responses:
+        '200':
+          description: Article found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Article'
+
+        '404':
+          description: Article not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+        '422':
+          description: Invalid UUID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+        '500':
+          description: Database/server errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /entities:
     get:
       summary: List entities
