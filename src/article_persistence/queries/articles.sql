@@ -71,6 +71,7 @@ WITH source_article AS (
 ),
 article_classifications AS (
     SELECT article_id,
+           MAX(confidence_score) AS max_confidence,
            jsonb_agg(jsonb_build_object(
                'classifier_type', classifier_type,
                'confidence_score', confidence_score,
@@ -86,8 +87,6 @@ related_scores AS (
     INNER JOIN source_article sa ON src_ae.article_id = sa.id
     WHERE ae.article_id != sa.id
     GROUP BY ae.article_id
-    ORDER BY shared_entity_count DESC
-    LIMIT :limit
 )
 SELECT
     a.public_id, a.url, a.title, a.section, a.published_date,
@@ -103,5 +102,6 @@ LEFT JOIN article_classifications ac ON a.id = ac.article_id
 LEFT JOIN article_entities ae ON a.id = ae.article_id
 LEFT JOIN entities e ON ae.entity_id = e.id
 GROUP BY a.id, a.public_id, a.url, a.title, a.section, a.published_date,
-         a.full_text, ns.id, ac.classifications, rs.shared_entity_count
-ORDER BY rs.shared_entity_count DESC, a.published_date DESC;
+         a.full_text, ns.id, ac.classifications, ac.max_confidence, rs.shared_entity_count
+ORDER BY rs.shared_entity_count DESC, COALESCE(ac.max_confidence, 0) DESC, a.published_date DESC
+LIMIT :limit;

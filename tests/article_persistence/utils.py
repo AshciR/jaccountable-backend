@@ -3,9 +3,10 @@
 import asyncpg
 from datetime import datetime, timezone
 
-from src.article_persistence.models.domain import Article, ArticleEntity, Entity, NewsSource
+from src.article_persistence.models.domain import Article, ArticleEntity, Classification, Entity, NewsSource
 from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.article_persistence.repositories.article_entity_repository import ArticleEntityRepository
+from src.article_persistence.repositories.classification_repository import ClassificationRepository
 from src.article_persistence.repositories.entity_repository import EntityRepository
 from src.article_persistence.repositories.news_source_repository import NewsSourceRepository
 
@@ -116,6 +117,24 @@ async def create_test_article_entity(
         classifier_type=classifier_type,
     )
     return await repository.link_article_to_entity(conn, article_entity)
+
+
+async def create_test_classification(
+    conn: asyncpg.Connection,
+    article_id: int,
+    confidence_score: float = 0.8,
+    classifier_type: str = "CORRUPTION",
+    model_name: str = "gpt-4o-mini",
+) -> Classification:
+    """Insert a classification for an article with the given confidence score."""
+    repo = ClassificationRepository()
+    classification = Classification(
+        article_id=article_id,
+        classifier_type=classifier_type,
+        confidence_score=confidence_score,
+        model_name=model_name,
+    )
+    return await repo.insert_classification(conn, classification)
 
 
 async def insert_article_with_date(
