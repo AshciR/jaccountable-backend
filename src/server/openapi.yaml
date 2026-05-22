@@ -116,6 +116,59 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /articles/{public_id}/related:
+    get:
+      summary: Get related articles
+      description: |
+        Returns articles related to the given article, ranked by number of shared
+        entities, wrapped in a `{ "articles": [...] }` envelope. Articles from any
+        news source may appear. Returns an empty `articles` array when the article
+        has no entity links or no other articles share its entities.
+      operationId: getRelatedArticles
+      tags:
+        - Articles
+      parameters:
+        - name: public_id
+          in: path
+          required: true
+          description: Public UUID of the source article
+          schema:
+            type: string
+            format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of related articles to return (default 5, max 20)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+
+      responses:
+        '200':
+          description: Related articles (empty array if none found)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelatedArticlesResponse'
+
+        '422':
+          description: Invalid UUID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+        '500':
+          description: Database/server errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /articles/{public_id}:
     get:
       summary: Get article by ID
@@ -361,6 +414,16 @@ components:
           maximum: 1
           description: Confidence score for the classification
           example: 0.92
+
+    RelatedArticlesResponse:
+      type: object
+      required:
+        - articles
+      properties:
+        articles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Article'
 
     # ── Entities ────────────────────────────────────────────────────
 

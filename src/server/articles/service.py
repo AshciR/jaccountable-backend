@@ -92,6 +92,29 @@ class ArticleSearchService:
             )
         return result
 
+    async def get_related_articles(
+        self,
+        conn: asyncpg.Connection,
+        public_id: UUID,
+        limit: int = 5,
+    ) -> list[ArticleSearchResult]:
+        """Return articles related to the given article by shared entities."""
+        if self._cache is None:
+            return await self._repo.get_related_articles_by_public_id(conn, public_id, limit=limit)
+
+        cache_key = f"article:related:{public_id}:limit={limit}"
+        raw = await self._cache.get(cache_key)
+        if raw:
+            return [ArticleSearchResult.model_validate(r) for r in json.loads(raw)]
+
+        results = await self._repo.get_related_articles_by_public_id(conn, public_id, limit=limit)
+        await self._cache.set(
+            cache_key,
+            json.dumps([r.model_dump(mode="json") for r in results]),
+            ttl_seconds=300,
+        )
+        return results
+
     async def _get_cached(
         self,
         params: ArticleSearchParams,

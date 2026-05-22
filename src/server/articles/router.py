@@ -10,6 +10,7 @@ from src.server.articles.schemas import (
     ArticleSearchParams,
     ArticleSearchResponse,
     ArticleSearchResultSchema,
+    RelatedArticlesResponse,
 )
 from src.cache.cache_interface import CacheBackend
 from src.server.articles.service import ArticleSearchService
@@ -39,6 +40,19 @@ async def search_articles(
         total=total,
         page=params.page,
         page_size=params.page_size,
+    )
+
+
+@router.get("/{public_id}/related", response_model=RelatedArticlesResponse)
+async def get_related_articles(
+    public_id: UUID,
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    service: Annotated[ArticleSearchService, Depends(_get_service)],
+    limit: Annotated[int, Query(ge=1, le=20)] = 5,
+) -> RelatedArticlesResponse:
+    results = await service.get_related_articles(conn, public_id, limit=limit)
+    return RelatedArticlesResponse(
+        articles=[ArticleSearchResultSchema.model_validate(r) for r in results]
     )
 
 

@@ -69,6 +69,14 @@ class ArticleSearchResultSchema(BaseModel):
             return mapped
         return NewsSource(v)
 
+class RelatedArticlesResponse(BaseModel):
+    """Response wrapper for related articles."""
+
+    articles: list[ArticleSearchResultSchema]
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
 class ArticleSearchResponse(BaseModel):
     """Paginated article search response."""
 
