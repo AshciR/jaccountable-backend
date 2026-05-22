@@ -1251,3 +1251,102 @@ class TestArticleDetailService:
         # Then: the article is returned normally
         assert result is not None
         assert result.url == "https://example.com/detail-no-cache"
+
+
+# ---------------------------------------------------------------------------
+# Related articles service tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetRelatedArticlesService:
+    """ArticleSearchService.get_related_articles() — fetch related articles by UUID."""
+
+    async def test_returns_related_articles_without_cache(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: two articles sharing an entity, service with no cache
+        source = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/svc-related-src",
+            title="Source article",
+            full_text="Content.",
+        )
+        other = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/svc-related-other",
+            title="Other article",
+            full_text="Content.",
+        )
+        entity = await create_test_entity(db_connection, name="OCG", normalized_name="ocg-svc")
+        await create_test_article_entity(db_connection, source.id, entity.id)
+        await create_test_article_entity(db_connection, other.id, entity.id)
+        service = ArticleSearchService(cache=None)
+
+        # When: related articles are fetched
+        results = await service.get_related_articles(db_connection, source.public_id)
+
+        # Then: the related article is returned
+        assert any(r.url == "https://example.com/svc-related-other" for r in results)
+
+    async def test_cache_miss_populates_cache(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: two articles sharing an entity and a fresh cache
+        source = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/svc-related-cache-miss-src",
+            title="Source article cache miss",
+            full_text="Content.",
+        )
+        other = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/svc-related-cache-miss-other",
+            title="Other article cache miss",
+            full_text="Content.",
+        )
+        entity = await create_test_entity(db_connection, name="NHT", normalized_name="nht-svc-cache")
+        await create_test_article_entity(db_connection, source.id, entity.id)
+        await create_test_article_entity(db_connection, other.id, entity.id)
+        cache = InMemoryCache()
+        service = ArticleSearchService(cache=cache)
+
+        # When: related articles are fetched for the first time
+        await service.get_related_articles(db_connection, source.public_id)
+
+        # Then: the result is now stored in the cache
+        assert cache.size() == 1
+
+    async def test_cache_hit_returns_without_db_call(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: two articles sharing an entity, primed cache via first fetch
+        source = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/svc-related-cache-hit-src",
+            title="Source article cache hit",
+            full_text="Content.",
+        )
+        other = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/svc-related-cache-hit-other",
+            title="Other article cache hit",
+            full_text="Content.",
+        )
+        entity = await create_test_entity(db_connection, name="BOJ", normalized_name="boj-svc-hit")
+        await create_test_article_entity(db_connection, source.id, entity.id)
+        await create_test_article_entity(db_connection, other.id, entity.id)
+        cache = InMemoryCache()
+        service = ArticleSearchService(cache=cache)
+        await service.get_related_articles(db_connection, source.public_id)
+
+        # And: the related article is then deleted from the DB
+        await delete_article(db_connection, other.id)
+
+        # When: related articles are fetched again
+        results = await service.get_related_articles(db_connection, source.public_id)
+
+        # Then: the cached result is returned (not the now-deleted DB row)
+        assert any(r.url == "https://example.com/svc-related-cache-hit-other" for r in results)

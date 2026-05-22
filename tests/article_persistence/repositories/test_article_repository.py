@@ -7,7 +7,12 @@ from uuid import uuid4
 
 from src.article_persistence.repositories.article_repository import ArticleRepository
 from src.article_persistence.models.domain import Article
-from tests.article_persistence.utils import create_test_news_source
+from tests.article_persistence.utils import (
+    create_test_article,
+    create_test_article_entity,
+    create_test_entity,
+    create_test_news_source,
+)
 
 
 class TestInsertArticleHappyPath:
@@ -426,3 +431,158 @@ class TestGetByPublicId:
         public_ids = [r.public_id for r in results]
         assert len(set(public_ids)) == 3  # All public_ids are unique
         assert all(pid is not None for pid in public_ids)
+
+
+class TestGetRelatedArticlesHappyPath:
+    """Happy path tests for get_related_articles_by_public_id."""
+
+    async def test_two_articles_sharing_one_entity_returns_related(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: two articles linked to the same entity
+        source = await create_test_article(db_connection, url="https://example.com/related-src-1", news_source_id=1)
+        other = await create_test_article(db_connection, url="https://example.com/related-other-1", news_source_id=1)
+        entity = await create_test_entity(db_connection, name="INDECOM", normalized_name="indecom-rel-1")
+        await create_test_article_entity(db_connection, source.id, entity.id)
+        await create_test_article_entity(db_connection, other.id, entity.id)
+        repo = ArticleRepository()
+
+        # When: related articles are fetched for the source article
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+
+        # Then: the other article appears in the results
+        result_ids = [r.public_id for r in results]
+        assert other.public_id in result_ids
+        assert source.public_id not in result_ids
+
+    async def test_ranking_by_shared_entity_count(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: source article shares 2 entities with article A and 1 entity with article B
+        source = await create_test_article(db_connection, url="https://example.com/rank-src", news_source_id=1)
+        article_a = await create_test_article(db_connection, url="https://example.com/rank-a", news_source_id=1)
+        article_b = await create_test_article(db_connection, url="https://example.com/rank-b", news_source_id=1)
+
+        entity1 = await create_test_entity(db_connection, name="Petrojam", normalized_name="petrojam-rank")
+        entity2 = await create_test_entity(db_connection, name="NWC", normalized_name="nwc-rank")
+
+        # Link source and article_a to both entities
+        await create_test_article_entity(db_connection, source.id, entity1.id)
+        await create_test_article_entity(db_connection, source.id, entity2.id)
+        await create_test_article_entity(db_connection, article_a.id, entity1.id)
+        await create_test_article_entity(db_connection, article_a.id, entity2.id)
+        # Link source and article_b to only one entity
+        await create_test_article_entity(db_connection, article_b.id, entity1.id)
+
+        repo = ArticleRepository()
+
+        # When: related articles are fetched
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+
+        # Then: article_a (2 shared entities) ranks above article_b (1 shared entity)
+        result_ids = [r.public_id for r in results]
+        assert result_ids.index(article_a.public_id) < result_ids.index(article_b.public_id)
+
+    async def test_related_articles_come_from_multiple_news_sources(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: a second news source distinct from the default (id=1)
+        second_source = await create_test_news_source(
+            db_connection,
+            name="Test Observer Multi Source",
+            base_url="https://test-observer-multi.com",
+        )
+
+        source = await create_test_article(db_connection, url="https://example.com/multi-src-source", news_source_id=1)
+        gleaner_article = await create_test_article(db_connection, url="https://example.com/multi-src-gleaner", news_source_id=1)
+        observer_article = await create_test_article(db_connection, url="https://example.com/multi-src-observer", news_source_id=second_source.id)
+
+        entity = await create_test_entity(db_connection, name="Parliament", normalized_name="parliament-multi")
+        await create_test_article_entity(db_connection, source.id, entity.id)
+        await create_test_article_entity(db_connection, gleaner_article.id, entity.id)
+        await create_test_article_entity(db_connection, observer_article.id, entity.id)
+
+        repo = ArticleRepository()
+
+        # When: related articles are fetched for the source article
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+
+        # Then: related articles from both news sources are returned
+        result_ids = {r.public_id for r in results}
+        assert gleaner_article.public_id in result_ids
+        assert observer_article.public_id in result_ids
+
+    async def test_article_with_no_entities_returns_empty_list(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with no entity links
+        source = await create_test_article(db_connection, url="https://example.com/no-entities", news_source_id=1)
+        repo = ArticleRepository()
+
+        # When: related articles are fetched
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+
+        # Then: empty list returned
+        assert results == []
+
+    async def test_no_shared_entities_between_two_articles_returns_empty_list(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: two articles each linked to a different entity (no overlap)
+        source = await create_test_article(db_connection, url="https://example.com/no-shared-src", news_source_id=1)
+        other = await create_test_article(db_connection, url="https://example.com/no-shared-other", news_source_id=1)
+        entity_a = await create_test_entity(db_connection, name="Body A", normalized_name="body-a-no-shared")
+        entity_b = await create_test_entity(db_connection, name="Body B", normalized_name="body-b-no-shared")
+        await create_test_article_entity(db_connection, source.id, entity_a.id)
+        await create_test_article_entity(db_connection, other.id, entity_b.id)
+        repo = ArticleRepository()
+
+        # When: related articles are fetched for the source article
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+
+        # Then: empty list returned since no entities are shared
+        assert results == []
+
+    async def test_limit_parameter_caps_results(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: source article shares an entity with 6 other articles
+        source = await create_test_article(db_connection, url="https://example.com/limit-src", news_source_id=1)
+        entity = await create_test_entity(db_connection, name="GOJ", normalized_name="goj-limit")
+        await create_test_article_entity(db_connection, source.id, entity.id)
+
+        for i in range(6):
+            art = await create_test_article(db_connection, url=f"https://example.com/limit-art-{i}", news_source_id=1)
+            await create_test_article_entity(db_connection, art.id, entity.id)
+
+        repo = ArticleRepository()
+
+        # When: related articles are fetched with limit=5
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, limit=5)
+
+        # Then: at most 5 results returned
+        assert len(results) == 5
+
+
+class TestGetRelatedArticlesEdgeCases:
+    """Edge case tests for get_related_articles_by_public_id."""
+
+    async def test_nonexistent_public_id_returns_empty_list(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: a UUID that does not exist in the database
+        nonexistent_id = uuid4()
+        repo = ArticleRepository()
+
+        # When: related articles are fetched for the nonexistent id
+        results = await repo.get_related_articles_by_public_id(db_connection, nonexistent_id)
+
+        # Then: empty list returned (not an error)
+        assert results == []

@@ -153,6 +153,32 @@ class ArticleRepository:
             return None
         return _row_to_search_result(row)
 
+    async def get_related_articles_by_public_id(
+        self,
+        conn: asyncpg.Connection,
+        public_id: UUID,
+        limit: int = 5,
+    ) -> list[ArticleSearchResult]:
+        """Retrieve articles related to the given article by shared entities.
+
+        Results are ordered by number of shared entities descending, then by
+        published_date descending. Articles from any news source may appear.
+
+        Args:
+            conn: Database connection to use for the query
+            public_id: The public UUID of the source article
+            limit: Maximum number of related articles to return
+
+        Returns:
+            List of ArticleSearchResult ordered by relatedness. Empty list if
+            the article has no entities, no other articles share its entities,
+            or the public_id does not exist.
+        """
+        rows = await self.queries.get_related_articles_by_public_id(
+            conn, public_id=public_id, limit=limit
+        )
+        return [_row_to_search_result(row) for row in rows]
+
     async def search_articles(
         self,
         conn: asyncpg.Connection,
