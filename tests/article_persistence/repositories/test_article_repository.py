@@ -10,8 +10,10 @@ from src.article_persistence.models.domain import Article
 from tests.article_persistence.utils import (
     create_test_article,
     create_test_article_entity,
+    create_test_classification,
     create_test_entity,
     create_test_news_source,
+    insert_article_with_date,
 )
 
 
@@ -568,6 +570,74 @@ class TestGetRelatedArticlesHappyPath:
 
         # Then: at most 5 results returned
         assert len(results) == 5
+
+
+class TestGetRelatedArticlesOrdering:
+    """Tests that verify the confidence → date → entity count sort order."""
+
+    async def test_entity_count_sorts_before_confidence(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given:
+        #   article_a: 2 shared entities, low confidence (0.5)
+        #   article_b: 1 shared entity,  high confidence (0.9), newer date
+        #   article_c: 1 shared entity,  low confidence (0.5), older date
+        older = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        newer = datetime(2024, 6, 1, tzinfo=timezone.utc)
+
+        source = await insert_article_with_date(db_connection, url="https://example.com/ord-src", published_date=older)
+        article_a = await insert_article_with_date(db_connection, url="https://example.com/ord-a", published_date=older)
+        article_b = await insert_article_with_date(db_connection, url="https://example.com/ord-b", published_date=newer)
+        article_c = await insert_article_with_date(db_connection, url="https://example.com/ord-c", published_date=older)
+
+        entity1 = await create_test_entity(db_connection, name="Petrojam Ord", normalized_name="petrojam-ord")
+        entity2 = await create_test_entity(db_connection, name="NWC Ord", normalized_name="nwc-ord")
+
+        # source and article_a share both entities; article_b and article_c share only entity1
+        for art in [source, article_a]:
+            await create_test_article_entity(db_connection, art.id, entity1.id)
+            await create_test_article_entity(db_connection, art.id, entity2.id)
+        for art in [article_b, article_c]:
+            await create_test_article_entity(db_connection, art.id, entity1.id)
+
+        await create_test_classification(db_connection, article_a.id, confidence_score=0.5)
+        await create_test_classification(db_connection, article_b.id, confidence_score=0.9)
+        await create_test_classification(db_connection, article_c.id, confidence_score=0.5)
+
+        repo = ArticleRepository()
+
+        # When: related articles are fetched
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, limit=10)
+
+        # Then: order is A (2 entities) → B (1 entity, high conf) → C (1 entity, low conf, older)
+        result_ids = [r.public_id for r in results]
+        assert result_ids.index(article_a.public_id) < result_ids.index(article_b.public_id)
+        assert result_ids.index(article_b.public_id) < result_ids.index(article_c.public_id)
+
+    async def test_unclassified_articles_sort_last(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: two related articles — one classified (confidence 0.7), one unclassified
+        source = await create_test_article(db_connection, url="https://example.com/ord-unclass-src", news_source_id=1)
+        classified = await create_test_article(db_connection, url="https://example.com/ord-unclass-yes", news_source_id=1)
+        unclassified = await create_test_article(db_connection, url="https://example.com/ord-unclass-no", news_source_id=1)
+
+        entity = await create_test_entity(db_connection, name="NSWMA Ord", normalized_name="nswma-ord")
+        for art in [source, classified, unclassified]:
+            await create_test_article_entity(db_connection, art.id, entity.id)
+
+        await create_test_classification(db_connection, classified.id, confidence_score=0.7)
+
+        repo = ArticleRepository()
+
+        # When: related articles are fetched
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, limit=10)
+
+        # Then: classified article appears before the unclassified one
+        result_ids = [r.public_id for r in results]
+        assert result_ids.index(classified.public_id) < result_ids.index(unclassified.public_id)
 
 
 class TestGetRelatedArticlesEdgeCases:
