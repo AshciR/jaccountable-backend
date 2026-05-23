@@ -9,6 +9,11 @@ from fastapi import Request
 from loguru import logger
 
 
+KNOWN_NAVIGATION_SOURCES: frozenset[str] = frozenset(
+    {"home", "search", "related", "direct"}
+)
+
+
 class AnalyticsClient:
     """Wraps the PostHog Python SDK with graceful no-op behavior when unconfigured.
 
@@ -72,6 +77,17 @@ class AnalyticsClient:
         Update this method to change the internal traffic detection strategy.
         """
         return request.headers.get("X-Internal-Request", "").lower() == "true"
+
+    def get_navigation_source(self, request: Request) -> str:
+        """Return the normalized navigation source for an incoming request.
+
+        Reads the X-Source header (set by the frontend when linking to a page)
+        and normalizes it against KNOWN_NAVIGATION_SOURCES. Unknown or missing
+        values become "unknown" so the property is always present and stable
+        for PostHog filtering.
+        """
+        raw = (request.headers.get("X-Source") or "").strip().lower()
+        return raw if raw in KNOWN_NAVIGATION_SOURCES else "unknown"
 
     def capture_with_common_props(
         self,

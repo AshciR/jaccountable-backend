@@ -57,6 +57,8 @@ analytics.capture_with_common_props(
 
 **`is_internal_request(request)`** — returns `True` if `X-Internal-Request: true` header is present. Update this method to change the internal traffic detection strategy.
 
+**`get_navigation_source(request)`** — reads the `X-Source` header and normalizes it against `KNOWN_NAVIGATION_SOURCES` (`"home" | "search" | "related" | "direct"`). Unknown or missing values become `"unknown"`. The frontend sets `X-Source` based on where the user clicked the link (or, for SSR, where the route arrived from). To add a new navigation source, extend the `KNOWN_NAVIGATION_SOURCES` frozenset in `src/analytics/client.py`.
+
 **Disabled mode** — set `POSTHOG_API_KEY=` (empty) to silently disable all event tracking. All `capture_*` calls become no-ops. Useful for local dev without a PostHog project.
 
 **Environment variables:** `POSTHOG_API_KEY`, `POSTHOG_HOST`, `APP_ENV`
