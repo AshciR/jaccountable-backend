@@ -197,3 +197,35 @@ class TestAnalyticsClientRequestHelpers:
 
         # When / Then
         assert client.is_internal_request(request) is False
+
+    async def test_get_navigation_source_returns_known_value(self):
+        # Given: a request with X-Source set to a known navigation source
+        client = AnalyticsClient(api_key="")
+        request = self._make_request({"X-Source": "home"})
+
+        # When / Then
+        assert client.get_navigation_source(request) == "home"
+
+    async def test_get_navigation_source_normalizes_case_and_whitespace(self):
+        # Given: a request with mixed-case + whitespace around a known value
+        client = AnalyticsClient(api_key="")
+        request = self._make_request({"X-Source": "  SEARCH  "})
+
+        # When / Then: normalized to lowercase trimmed value
+        assert client.get_navigation_source(request) == "search"
+
+    async def test_get_navigation_source_unknown_value_becomes_unknown(self):
+        # Given: a request with X-Source set to a value not in the allowlist
+        client = AnalyticsClient(api_key="")
+        request = self._make_request({"X-Source": "weird-source"})
+
+        # When / Then: defensively normalized to "unknown"
+        assert client.get_navigation_source(request) == "unknown"
+
+    async def test_get_navigation_source_absent_header_becomes_unknown(self):
+        # Given: a request with no X-Source header
+        client = AnalyticsClient(api_key="")
+        request = self._make_request({})
+
+        # When / Then
+        assert client.get_navigation_source(request) == "unknown"
