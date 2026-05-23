@@ -17,6 +17,7 @@ from src.cache.redis_cache import RedisCacheBackend
 from src.server.articles.router import router as articles_router
 from src.server.entities.router import router as entities_router
 from src.server.health.router import router as health_router
+from src.server.metrics.router import router as metrics_router
 from src.server.middleware import CanonicalLogMiddleware
 
 API_V1_PREFIX = "/api/v1"
@@ -106,3 +107,4 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(articles_router, prefix=API_V1_PREFIX)
 app.include_router(entities_router, prefix=API_V1_PREFIX)
+app.include_router(metrics_router, prefix=API_V1_PREFIX)
