@@ -215,6 +215,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /metrics:
+    get:
+      summary: Get site-wide metrics
+      description: |
+        Returns aggregate counts used by the frontend hero section:
+        - `articleCount`: total number of articles stored
+        - `entityCount`: total number of distinct entities that appear in at least one article
+          (orphaned entities with no article links are excluded)
+
+        Results are cached server-side (TTL 300s) and may be slightly stale.
+      operationId: getMetrics
+      tags:
+        - Metrics
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+
+        '500':
+          description: Database/server errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /entities:
     get:
       summary: List entities
@@ -482,6 +510,23 @@ components:
           format: date-time
           description: Most recent article publication date featuring this entity (scoped by time window if since is provided)
           example: '2024-02-14T09:15:00Z'
+
+    # ── Metrics ─────────────────────────────────────────────────────
+
+    MetricsResponse:
+      type: object
+      required:
+        - articleCount
+        - entityCount
+      properties:
+        articleCount:
+          type: integer
+          description: Total number of articles stored
+          example: 12345
+        entityCount:
+          type: integer
+          description: Total number of distinct entities appearing in at least one article
+          example: 1200
 
     # ── Shared ──────────────────────────────────────────────────────
 
