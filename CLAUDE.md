@@ -50,10 +50,13 @@ analytics.capture_with_common_props(
     event="category:object_action",
     properties={"property_name": value},
     is_internal=analytics.is_internal_request(request),
+    session_id=analytics.get_session_id(request),
 )
 ```
 
 **`get_distinct_id(request)`** — prefers `X-PostHog-Distinct-Id` header (frontend passes its PostHog ID to link events to the same person); falls back to a per-request UUID. Never uses client IP (shared NAT/VPN would merge unrelated users). Update this method when user auth is added.
+
+**`get_session_id(request)`** — reads the `X-PostHog-Session-Id` header (forwarded by the frontend's `apiFetch` wrapper) and returns it, or `None` when absent (SSR / pre-session clients). Pass the result as `session_id=` to `capture_with_common_props` — the client injects it as PostHog's reserved `$session_id` property only when non-None, so session-scoped queries can link the server-side event to the client session.
 
 **`is_internal_request(request)`** — returns `True` if `X-Internal-Request: true` header is present. Update this method to change the internal traffic detection strategy.
 
