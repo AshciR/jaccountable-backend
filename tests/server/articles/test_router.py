@@ -97,7 +97,7 @@ class TestSearchAnalyticsEventFired:
         assert call_kwargs["properties"]["search_query"] == "corruption"
         assert call_kwargs["properties"]["results_count"] == 3
 
-    async def test_event_fired_with_none_query_in_browse_mode(
+    async def test_event_not_fired_when_query_is_missing(
         self, client: TestClient, mock_analytics: MagicMock
     ):
         # Given: service returns articles for a browse (no-query) request
@@ -106,14 +106,29 @@ class TestSearchAnalyticsEventFired:
         ) as mock_search:
             mock_search.return_value = ([], 42)
 
-            # When: client calls with no q param (browse mode)
+            # When: client calls with no q param (homepage browse)
             response = client.get("/api/v1/articles")
 
-        # Then: search_query is None in the event (browse mode, not a bug)
+        # Then: request succeeds but no search:query_submit event is captured.
+        # Empty-query browses aren't real searches and would pollute the funnel.
         assert response.status_code == 200
-        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
-        assert call_kwargs["properties"]["search_query"] is None
-        assert call_kwargs["properties"]["results_count"] == 42
+        mock_analytics.capture_with_common_props.assert_not_called()
+
+    async def test_event_not_fired_when_query_is_whitespace_only(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: service returns articles for a whitespace-only query
+        with patch.object(
+            ArticleSearchService, "search", new_callable=AsyncMock
+        ) as mock_search:
+            mock_search.return_value = ([], 42)
+
+            # When: client submits q="   "
+            response = client.get("/api/v1/articles", params={"q": "   "})
+
+        # Then: whitespace-only queries are treated the same as missing queries
+        assert response.status_code == 200
+        mock_analytics.capture_with_common_props.assert_not_called()
 
     async def test_results_count_reflects_total_not_page_size(
         self, client: TestClient, mock_analytics: MagicMock
@@ -125,7 +140,10 @@ class TestSearchAnalyticsEventFired:
             mock_search.return_value = ([], 100)
 
             # When: client fetches page 1 with page_size=20
-            client.get("/api/v1/articles", params={"page": 1, "page_size": 20})
+            client.get(
+                "/api/v1/articles",
+                params={"q": "corruption", "page": 1, "page_size": 20},
+            )
 
         # Then: results_count is the total count, not the page size
         call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
@@ -144,7 +162,7 @@ class TestSearchAnalyticsEventFired:
             mock_search.return_value = ([], 0)
 
             # When: a request is made
-            client.get("/api/v1/articles")
+            client.get("/api/v1/articles", params={"q": "corruption"})
 
         # Then: the router passes those values to capture_with_common_props
         call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
@@ -267,7 +285,11 @@ class TestSearchAnalyticsInternalFlag:
             mock_search.return_value = ([], 0)
 
             # When: request is made
-            client.get("/api/v1/articles", headers={"X-Internal-Request": "true"})
+            client.get(
+                "/api/v1/articles",
+                params={"q": "corruption"},
+                headers={"X-Internal-Request": "true"},
+            )
 
         # Then: is_internal=True is passed to capture_with_common_props
         call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
@@ -285,7 +307,7 @@ class TestSearchAnalyticsInternalFlag:
             mock_search.return_value = ([], 0)
 
             # When: request has no internal header
-            client.get("/api/v1/articles")
+            client.get("/api/v1/articles", params={"q": "corruption"})
 
         # Then: is_internal=False is passed to capture_with_common_props
         call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
@@ -309,6 +331,7 @@ class TestSearchAnalyticsSessionId:
             # When: request is made with the PostHog session header
             client.get(
                 "/api/v1/articles",
+                params={"q": "corruption"},
                 headers={"X-PostHog-Session-Id": "session-search-abc"},
             )
 
@@ -328,7 +351,7 @@ class TestSearchAnalyticsSessionId:
             mock_search.return_value = ([], 0)
 
             # When: request is made without the PostHog session header
-            client.get("/api/v1/articles")
+            client.get("/api/v1/articles", params={"q": "corruption"})
 
         # Then: session_id=None is passed (client method will then omit $session_id)
         call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs

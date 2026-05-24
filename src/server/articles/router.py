@@ -105,6 +105,11 @@ def _capture_search_event(
     # page == 1 means a fresh search or browse; page > 1 means the user clicked
     # Load More — the frontend reuses the same endpoint for both actions.
     if params.page == 1:
+        # Skip empty-query loads (e.g. homepage default browse): they aren't real
+        # searches and the frontend often fires them before PostHog has initialized,
+        # so distinct_id / session_id come through wrong and pollute the search funnel.
+        if not (params.q and params.q.strip()):
+            return
         analytics.capture_with_common_props(
             distinct_id=distinct_id,
             event="search:query_submit",
