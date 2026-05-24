@@ -67,6 +67,15 @@ class AnalyticsClient:
         """
         return request.headers.get("X-PostHog-Distinct-Id") or str(uuid4())
 
+    def get_session_id(self, request: Request) -> str | None:
+        """Extract the PostHog session_id from the X-PostHog-Session-Id header.
+
+        Returns None when the header is absent (e.g. SSR requests or clients
+        without an active PostHog session). Callers should omit `$session_id`
+        from event properties in that case rather than sending a placeholder.
+        """
+        return request.headers.get("X-PostHog-Session-Id") or None
+
     def is_internal_request(self, request: Request) -> bool:
         """Return True if the request originated from internal infrastructure.
 
@@ -96,12 +105,14 @@ class AnalyticsClient:
         properties: dict[str, Any] | None = None,
         *,
         is_internal: bool = False,
+        session_id: str | None = None,
     ) -> None:
         """Fire an analytics event with common properties automatically merged.
 
         Common properties injected into every event:
           - environment  (from APP_ENV env var, defaults to "development")
           - is_internal  (caller-provided, typically from is_internal_request())
+          - $session_id  (caller-provided when present; omitted when None)
 
         Use this method for all event tracking to ensure consistent properties.
         """
@@ -109,6 +120,12 @@ class AnalyticsClient:
             "environment": self.environment,
             "is_internal": is_internal,
         }
+        if session_id:
+            # $session_id is PostHog's reserved property name that links this
+            # server-side event to a client-side session. The leading $ is
+            # required — do not rename. See:
+            # https://posthog.com/docs/data/sessions#passing-session-ids-from-client-side-code-into-server-side-events
+            common["$session_id"] = session_id
         merged = {**common, **(properties or {})}
         self._capture(distinct_id=distinct_id, event=event, properties=merged)
 

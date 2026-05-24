@@ -89,6 +89,7 @@ def _capture_detail_view_event(
             "navigation_source": analytics.get_navigation_source(request),
         },
         is_internal=analytics.is_internal_request(request),
+        session_id=analytics.get_session_id(request),
     )
 
 
@@ -100,6 +101,7 @@ def _capture_search_event(
 ) -> None:
     distinct_id = analytics.get_distinct_id(request)
     is_internal = analytics.is_internal_request(request)
+    session_id = analytics.get_session_id(request)
     # page == 1 means a fresh search or browse; page > 1 means the user clicked
     # Load More — the frontend reuses the same endpoint for both actions.
     if params.page == 1:
@@ -108,6 +110,7 @@ def _capture_search_event(
             event="search:query_submit",
             properties={"search_query": params.q, "results_count": total},
             is_internal=is_internal,
+            session_id=session_id,
         )
     else:
         analytics.capture_with_common_props(
@@ -119,4 +122,5 @@ def _capture_search_event(
                 "current_results_count": (params.page - 1) * params.page_size,
             },
             is_internal=is_internal,
+            session_id=session_id,
         )

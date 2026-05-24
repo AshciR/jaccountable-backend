@@ -38,6 +38,7 @@ def mock_analytics() -> MagicMock:
     mock.environment = "test"
     mock.get_distinct_id.return_value = "test-distinct-id"
     mock.is_internal_request.return_value = False
+    mock.get_session_id.return_value = None
     return mock
 
 
@@ -291,6 +292,49 @@ class TestSearchAnalyticsInternalFlag:
         assert call_kwargs["is_internal"] is False
 
 
+class TestSearchAnalyticsSessionId:
+    """session_id is sourced from analytics.get_session_id(request)."""
+
+    async def test_session_id_propagated_when_helper_returns_value(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: get_session_id returns a session id (header was present)
+        mock_analytics.get_session_id.return_value = "session-search-abc"
+
+        with patch.object(
+            ArticleSearchService, "search", new_callable=AsyncMock
+        ) as mock_search:
+            mock_search.return_value = ([], 0)
+
+            # When: request is made with the PostHog session header
+            client.get(
+                "/api/v1/articles",
+                headers={"X-PostHog-Session-Id": "session-search-abc"},
+            )
+
+        # Then: session_id is passed through to capture_with_common_props
+        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
+        assert call_kwargs["session_id"] == "session-search-abc"
+
+    async def test_session_id_none_when_helper_returns_none(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: get_session_id returns None (header was absent)
+        mock_analytics.get_session_id.return_value = None
+
+        with patch.object(
+            ArticleSearchService, "search", new_callable=AsyncMock
+        ) as mock_search:
+            mock_search.return_value = ([], 0)
+
+            # When: request is made without the PostHog session header
+            client.get("/api/v1/articles")
+
+        # Then: session_id=None is passed (client method will then omit $session_id)
+        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
+        assert call_kwargs["session_id"] is None
+
+
 # ---------------------------------------------------------------------------
 # TestArticleDetailAnalytics
 # ---------------------------------------------------------------------------
@@ -406,4 +450,43 @@ class TestArticleDetailAnalytics:
         call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
         assert call_kwargs["distinct_id"] == "frontend-posthog-id"
         assert call_kwargs["is_internal"] is True
+
+    async def test_session_id_propagated_when_helper_returns_value(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: get_session_id returns a value (X-PostHog-Session-Id was present)
+        mock_analytics.get_session_id.return_value = "session-detail-xyz"
+
+        with patch.object(
+            ArticleSearchService, "get_by_public_id", new_callable=AsyncMock
+        ) as mock_get:
+            mock_get.return_value = _make_detail_result(public_id=self._PUBLIC_ID)
+
+            # When: detail request is made with the PostHog session header
+            client.get(
+                f"/api/v1/articles/{self._PUBLIC_ID}",
+                headers={"X-PostHog-Session-Id": "session-detail-xyz"},
+            )
+
+        # Then: session_id is forwarded to capture_with_common_props
+        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
+        assert call_kwargs["session_id"] == "session-detail-xyz"
+
+    async def test_session_id_none_when_helper_returns_none(
+        self, client: TestClient, mock_analytics: MagicMock
+    ):
+        # Given: get_session_id returns None (no PostHog session header on request)
+        mock_analytics.get_session_id.return_value = None
+
+        with patch.object(
+            ArticleSearchService, "get_by_public_id", new_callable=AsyncMock
+        ) as mock_get:
+            mock_get.return_value = _make_detail_result(public_id=self._PUBLIC_ID)
+
+            # When: detail request is made without the session header
+            client.get(f"/api/v1/articles/{self._PUBLIC_ID}")
+
+        # Then: session_id=None is forwarded so client omits $session_id from event
+        call_kwargs = mock_analytics.capture_with_common_props.call_args.kwargs
+        assert call_kwargs["session_id"] is None
 
