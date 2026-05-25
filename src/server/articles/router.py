@@ -49,8 +49,11 @@ async def get_related_articles(
     conn: Annotated[asyncpg.Connection, Depends(get_db)],
     service: Annotated[ArticleSearchService, Depends(_get_service)],
     limit: Annotated[int, Query(ge=1, le=20)] = 5,
+    min_confidence: Annotated[float, Query(ge=0.0, le=1.0)] = 0.8,
 ) -> RelatedArticlesResponse:
-    results = await service.get_related_articles(conn, public_id, limit=limit)
+    results = await service.get_related_articles(
+        conn, public_id, limit=limit, min_confidence=min_confidence
+    )
     return RelatedArticlesResponse(
         articles=[ArticleSearchResultSchema.model_validate(r) for r in results]
     )
