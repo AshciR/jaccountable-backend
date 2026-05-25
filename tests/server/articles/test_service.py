@@ -83,7 +83,7 @@ class TestSearchArticlesFTS:
 
         # When: we search for "corruption"
         results, total = await service.search(
-            db_connection, ArticleSearchParams(q="corruption")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="corruption")
         )
 
         # Then: the article is returned
@@ -106,7 +106,7 @@ class TestSearchArticlesFTS:
 
         # When: we search for "embezzlement"
         results, total = await service.search(
-            db_connection, ArticleSearchParams(q="embezzlement")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="embezzlement")
         )
 
         # Then: the article is returned
@@ -129,7 +129,7 @@ class TestSearchArticlesFTS:
 
         # When: we search for "bribery"
         results, _ = await service.search(
-            db_connection, ArticleSearchParams(q="bribery")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="bribery")
         )
 
         # Then: the matching result has a non-null snippet
@@ -146,7 +146,7 @@ class TestSearchArticlesFTS:
 
         # When: we search for an extremely unlikely term
         results, total = await service.search(
-            db_connection, ArticleSearchParams(q="xyzzyunlikelytermzqq")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="xyzzyunlikelytermzqq")
         )
 
         # Then: no results and count is zero
@@ -175,7 +175,7 @@ class TestSearchArticlesFTS:
 
         # When: we search with page_size=1
         results, total = await service.search(
-            db_connection, ArticleSearchParams(q="accountability", page=1, page_size=1)
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="accountability", page=1, page_size=1)
         )
 
         # Then: only 1 result returned, but total >= 2
@@ -204,7 +204,7 @@ class TestSearchArticlesBrowse:
         service = ArticleSearchService()
 
         # When: we search with no q
-        results, total = await service.search(db_connection, ArticleSearchParams())
+        results, total = await service.search(db_connection, ArticleSearchParams(min_confidence=0.0))
 
         # Then: results are returned and snippet is the first 600 chars of full_text
         assert total >= 1
@@ -236,7 +236,7 @@ class TestSearchArticlesBrowse:
         service = ArticleSearchService()
 
         # When: we browse with default sort
-        results, _ = await service.search(db_connection, ArticleSearchParams())
+        results, _ = await service.search(db_connection, ArticleSearchParams(min_confidence=0.0))
 
         # Then: newer article appears before older article
         urls = [r.url for r in results]
@@ -274,7 +274,7 @@ class TestSearchArticlesBrowse:
         # When: we browse with sort=published_date, order=asc
         results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(sort="published_date", order="asc"),
+            ArticleSearchParams(min_confidence=0.0, sort="published_date", order="asc"),
         )
 
         # Then: oldest article with a date comes before newer
@@ -314,7 +314,7 @@ class TestSearchArticlesDateFilter:
         # When: we filter from 2023-01-01
         results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(from_date=datetime(2023, 1, 1, tzinfo=timezone.utc)),
+            ArticleSearchParams(min_confidence=0.0, from_date=datetime(2023, 1, 1, tzinfo=timezone.utc)),
         )
 
         # Then: old article is excluded, recent article is included
@@ -346,7 +346,7 @@ class TestSearchArticlesDateFilter:
         # When: we filter to_date=2020-01-01
         results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(to_date=datetime(2020, 1, 1, tzinfo=timezone.utc)),
+            ArticleSearchParams(min_confidence=0.0, to_date=datetime(2020, 1, 1, tzinfo=timezone.utc)),
         )
 
         # Then: new article is excluded, old article is included
@@ -371,7 +371,7 @@ class TestSearchArticlesDateFilter:
 
         # When: we query with from_date equal to the article's published_date
         results, _ = await service.search(
-            db_connection, ArticleSearchParams(from_date=boundary)
+            db_connection, ArticleSearchParams(min_confidence=0.0, from_date=boundary)
         )
 
         # Then: the article is included (>= is inclusive)
@@ -409,7 +409,7 @@ class TestSearchArticlesDateFilter:
         # When: we filter with from_date=2022-01-01 and to_date=2023-01-01
         results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(
+            ArticleSearchParams(min_confidence=0.0, 
                 from_date=datetime(2022, 1, 1, tzinfo=timezone.utc),
                 to_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
             ),
@@ -451,7 +451,7 @@ class TestSearchArticlesEntitySearch:
 
         # When: we search for "Petrojam"
         results, total = await service.search(
-            db_connection, ArticleSearchParams(q="Petrojam")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="Petrojam")
         )
 
         # Then: the article is returned even though text doesn't contain the term
@@ -480,7 +480,7 @@ class TestSearchArticlesEntitySearch:
 
         # When: we search with lowercase "holness"
         results, total = await service.search(
-            db_connection, ArticleSearchParams(q="holness")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="holness")
         )
 
         # Then: the article is still returned (ILIKE is case-insensitive)
@@ -515,7 +515,7 @@ class TestSearchArticlesEntitySearch:
 
         # When: we search for "petrojam" (matches entity1, not entity2)
         results, _ = await service.search(
-            db_connection, ArticleSearchParams(q="petrojam")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="petrojam")
         )
 
         # Then: the result for this article contains BOTH entity names
@@ -551,7 +551,7 @@ class TestSearchArticlesPagination:
         # When: we search with page_size=3
         results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(q="uniquepaginateword", page=1, page_size=3),
+            ArticleSearchParams(min_confidence=0.0, q="uniquepaginateword", page=1, page_size=3),
         )
 
         # Then: exactly 3 results are returned
@@ -574,11 +574,11 @@ class TestSearchArticlesPagination:
         # When: page 1 and page 2 are fetched with page_size=2
         page1_results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(q="offsetkeyword", page=1, page_size=2),
+            ArticleSearchParams(min_confidence=0.0, q="offsetkeyword", page=1, page_size=2),
         )
         page2_results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(q="offsetkeyword", page=2, page_size=2),
+            ArticleSearchParams(min_confidence=0.0, q="offsetkeyword", page=2, page_size=2),
         )
 
         # Then: pages are non-overlapping
@@ -603,7 +603,7 @@ class TestSearchArticlesPagination:
         # When: we fetch page 1 with page_size=2
         results, total = await service.search(
             db_connection,
-            ArticleSearchParams(q="totalcountword", page=1, page_size=2),
+            ArticleSearchParams(min_confidence=0.0, q="totalcountword", page=1, page_size=2),
         )
 
         # Then: 2 results returned but total reflects all 6 matches
@@ -639,7 +639,7 @@ class TestSearchArticlesAggregates:
 
         # When: we search for this article
         results, _ = await service.search(
-            db_connection, ArticleSearchParams(q="aggregation")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="aggregation")
         )
 
         # Then: both classifications appear in the result
@@ -674,7 +674,7 @@ class TestSearchArticlesAggregates:
 
         # When: we search for this article
         results, _ = await service.search(
-            db_connection, ArticleSearchParams(q="reasoning")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="reasoning")
         )
 
         # Then: the classification includes the reasoning text
@@ -709,7 +709,7 @@ class TestSearchArticlesAggregates:
 
         # When: we search for the article
         results, _ = await service.search(
-            db_connection, ArticleSearchParams(q="aggregation")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="aggregation")
         )
 
         # Then: both entity names appear in the result
@@ -735,7 +735,7 @@ class TestSearchArticlesAggregates:
 
         # When: we search for it
         results, _ = await service.search(
-            db_connection, ArticleSearchParams(q="noclassword")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="noclassword")
         )
 
         # Then: classifications is an empty list (not None)
@@ -760,7 +760,7 @@ class TestSearchArticlesAggregates:
 
         # When: we search for it
         results, _ = await service.search(
-            db_connection, ArticleSearchParams(q="noentityword")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="noentityword")
         )
 
         # Then: entities is an empty list (not None)
@@ -794,7 +794,7 @@ class TestSearchArticlesFullText:
         # When: we search without include_full_text (default False)
         results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(q="ftfalseword", include_full_text=False),
+            ArticleSearchParams(min_confidence=0.0, q="ftfalseword", include_full_text=False),
         )
 
         # Then: full_text is None on the result
@@ -821,7 +821,7 @@ class TestSearchArticlesFullText:
         # When: we search with include_full_text=True
         results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(q="fttrueword", include_full_text=True),
+            ArticleSearchParams(min_confidence=0.0, q="fttrueword", include_full_text=True),
         )
 
         # Then: full_text is populated on the result
@@ -854,7 +854,7 @@ class TestSearchArticlesEdgeCases:
 
         # When: we search with q="" (empty string)
         results, total = await service.search(
-            db_connection, ArticleSearchParams(q="")
+            db_connection, ArticleSearchParams(min_confidence=0.0, q="")
         )
 
         # Then: falls back to browse mode (does not crash), snippet is the first 600 chars of full_text
@@ -886,7 +886,7 @@ class TestSearchArticlesEdgeCases:
         # When: we search with q + date range
         results, total = await service.search(
             db_connection,
-            ArticleSearchParams(
+            ArticleSearchParams(min_confidence=0.0, 
                 q="uniquecombinedword",
                 from_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
                 to_date=datetime(2024, 1, 1, tzinfo=timezone.utc),
@@ -923,7 +923,7 @@ class TestSearchArticlesEdgeCases:
         # When: no q but sort=relevance (should fall back to published_date desc)
         results, _ = await service.search(
             db_connection,
-            ArticleSearchParams(q=None, sort="relevance", order="desc"),
+            ArticleSearchParams(min_confidence=0.0, q=None, sort="relevance", order="desc"),
         )
 
         # Then: newer article comes before older (date desc fallback)
@@ -964,7 +964,7 @@ class TestArticleSearchServiceCaching:
         service = ArticleSearchService(cache=cache)
 
         # When: we call search in browse mode (no q)
-        await service.search(db_connection, ArticleSearchParams())
+        await service.search(db_connection, ArticleSearchParams(min_confidence=0.0))
 
         # Then: the cache has exactly one entry
         assert cache.size() == 1
@@ -984,8 +984,8 @@ class TestArticleSearchServiceCaching:
         service = ArticleSearchService(cache=cache)
 
         # When: we browse with two different page sizes
-        await service.search(db_connection, ArticleSearchParams(page_size=10))
-        await service.search(db_connection, ArticleSearchParams(page_size=20))
+        await service.search(db_connection, ArticleSearchParams(min_confidence=0.0, page_size=10))
+        await service.search(db_connection, ArticleSearchParams(min_confidence=0.0, page_size=20))
 
         # Then: each distinct param combination produces its own cache entry
         assert cache.size() == 2
@@ -1005,7 +1005,7 @@ class TestArticleSearchServiceCaching:
         service = ArticleSearchService(cache=cache)
 
         # When: we call search with a free-text query (entity-driven homepage search)
-        await service.search(db_connection, ArticleSearchParams(q="corruption"))
+        await service.search(db_connection, ArticleSearchParams(min_confidence=0.0, q="corruption"))
 
         # Then: the result is cached (entity searches are highly repeatable)
         assert cache.size() == 1
@@ -1024,7 +1024,7 @@ class TestArticleSearchServiceCaching:
         service = ArticleSearchService(cache=None)
 
         # When: we browse
-        results, total = await service.search(db_connection, ArticleSearchParams())
+        results, total = await service.search(db_connection, ArticleSearchParams(min_confidence=0.0))
 
         # Then: results are returned normally
         assert total >= 1
@@ -1284,7 +1284,7 @@ class TestGetRelatedArticlesService:
         service = ArticleSearchService(cache=None)
 
         # When: related articles are fetched
-        results = await service.get_related_articles(db_connection, source.public_id)
+        results = await service.get_related_articles(db_connection, source.public_id, min_confidence=0.0)
 
         # Then: the related article is returned
         assert any(r.url == "https://example.com/svc-related-other" for r in results)
@@ -1313,7 +1313,7 @@ class TestGetRelatedArticlesService:
         service = ArticleSearchService(cache=cache)
 
         # When: related articles are fetched for the first time
-        await service.get_related_articles(db_connection, source.public_id)
+        await service.get_related_articles(db_connection, source.public_id, min_confidence=0.0)
 
         # Then: the result is now stored in the cache
         assert cache.size() == 1
@@ -1340,13 +1340,281 @@ class TestGetRelatedArticlesService:
         await create_test_article_entity(db_connection, other.id, entity.id)
         cache = InMemoryCache()
         service = ArticleSearchService(cache=cache)
-        await service.get_related_articles(db_connection, source.public_id)
+        await service.get_related_articles(db_connection, source.public_id, min_confidence=0.0)
 
         # And: the related article is then deleted from the DB
         await delete_article(db_connection, other.id)
 
         # When: related articles are fetched again
-        results = await service.get_related_articles(db_connection, source.public_id)
+        results = await service.get_related_articles(db_connection, source.public_id, min_confidence=0.0)
 
         # Then: the cached result is returned (not the now-deleted DB row)
         assert any(r.url == "https://example.com/svc-related-cache-hit-other" for r in results)
+
+
+# ---------------------------------------------------------------------------
+# min_confidence filter (search)
+# ---------------------------------------------------------------------------
+
+
+class TestSearchArticlesMinConfidence:
+    """min_confidence filters out articles whose max classification confidence is below the threshold."""
+
+    async def test_default_excludes_articles_below_threshold(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: article with only a 0.7 classification
+        low = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/mc-low",
+            title="Low confidence mcuniqueword article",
+            full_text="Content.",
+        )
+        await _insert_classification(db_connection, low.id, confidence_score=0.7)
+        # And: article with a 0.95 classification
+        high = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/mc-high",
+            title="High confidence mcuniqueword article",
+            full_text="Content.",
+        )
+        await _insert_classification(db_connection, high.id, confidence_score=0.95)
+        service = ArticleSearchService()
+
+        # When: we search with the default threshold (0.8)
+        results, total = await service.search(
+            db_connection, ArticleSearchParams(q="mcuniqueword")
+        )
+
+        # Then: only the high-confidence article is returned
+        urls = [r.url for r in results]
+        assert "https://example.com/mc-high" in urls
+        assert "https://example.com/mc-low" not in urls
+        assert total == 1
+
+    async def test_max_confidence_wins_when_article_has_mixed_classifications(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with both a 0.7 and a 0.9 classification
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/mc-max",
+            title="Mixed confidence mcmaxword article",
+            full_text="Content.",
+        )
+        await _insert_classification(
+            db_connection, article.id, classifier_type="CORRUPTION", confidence_score=0.7
+        )
+        await _insert_classification(
+            db_connection, article.id, classifier_type="HURRICANE_RELIEF", confidence_score=0.9
+        )
+        service = ArticleSearchService()
+
+        # When: we search with default threshold
+        results, _ = await service.search(
+            db_connection, ArticleSearchParams(q="mcmaxword")
+        )
+
+        # Then: article is included because MAX(confidence) = 0.9 >= 0.8
+        urls = [r.url for r in results]
+        assert "https://example.com/mc-max" in urls
+
+    async def test_default_excludes_unclassified_article(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with no classifications
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/mc-unclassified",
+            title="Unclassified mcunclassword article",
+            full_text="Content.",
+        )
+        service = ArticleSearchService()
+
+        # When: we search with default threshold
+        results, total = await service.search(
+            db_connection, ArticleSearchParams(q="mcunclassword")
+        )
+
+        # Then: unclassified article is excluded
+        urls = [r.url for r in results]
+        assert "https://example.com/mc-unclassified" not in urls
+        assert total == 0
+
+    async def test_explicit_zero_threshold_returns_all_articles(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: unclassified and low-confidence articles
+        await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/mc-zero-unclass",
+            title="Zero threshold mczeroword unclassified",
+            full_text="Content.",
+        )
+        low = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/mc-zero-low",
+            title="Zero threshold mczeroword low",
+            full_text="Content.",
+        )
+        await _insert_classification(db_connection, low.id, confidence_score=0.3)
+        service = ArticleSearchService()
+
+        # When: we search with min_confidence=0.0
+        results, _ = await service.search(
+            db_connection, ArticleSearchParams(q="mczeroword", min_confidence=0.0)
+        )
+
+        # Then: both articles are returned
+        urls = [r.url for r in results]
+        assert "https://example.com/mc-zero-unclass" in urls
+        assert "https://example.com/mc-zero-low" in urls
+
+    async def test_threshold_of_one_excludes_high_but_not_max(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: an article with 0.9 classification
+        article = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/mc-one",
+            title="High threshold mconeword article",
+            full_text="Content.",
+        )
+        await _insert_classification(db_connection, article.id, confidence_score=0.9)
+        service = ArticleSearchService()
+
+        # When: we require min_confidence=1.0
+        results, _ = await service.search(
+            db_connection, ArticleSearchParams(q="mconeword", min_confidence=1.0)
+        )
+
+        # Then: 0.9 < 1.0 so article is excluded
+        urls = [r.url for r in results]
+        assert "https://example.com/mc-one" not in urls
+
+
+# ---------------------------------------------------------------------------
+# min_confidence filter (related articles)
+# ---------------------------------------------------------------------------
+
+
+class TestGetRelatedArticlesMinConfidence:
+    """min_confidence applies the same way to the related-articles endpoint."""
+
+    async def test_default_excludes_low_and_unclassified_related(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: source + low/high/unclassified related, all sharing an entity
+        source = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/rel-mc-src",
+            title="Source article",
+            full_text="Content.",
+        )
+        low = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/rel-mc-low",
+            title="Related low",
+            full_text="Content.",
+        )
+        await _insert_classification(db_connection, low.id, confidence_score=0.5)
+        high = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/rel-mc-high",
+            title="Related high",
+            full_text="Content.",
+        )
+        await _insert_classification(db_connection, high.id, confidence_score=0.9)
+        unclassified = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/rel-mc-unclass",
+            title="Related unclassified",
+            full_text="Content.",
+        )
+        entity = await create_test_entity(
+            db_connection, name="RelMcEntity", normalized_name="rel-mc-entity"
+        )
+        for art in (source, low, high, unclassified):
+            await create_test_article_entity(db_connection, art.id, entity.id)
+        service = ArticleSearchService(cache=None)
+
+        # When: we fetch related with default threshold (0.8)
+        results = await service.get_related_articles(db_connection, source.public_id)
+
+        # Then: only the 0.9-confidence article is returned
+        urls = [r.url for r in results]
+        assert "https://example.com/rel-mc-high" in urls
+        assert "https://example.com/rel-mc-low" not in urls
+        assert "https://example.com/rel-mc-unclass" not in urls
+
+    async def test_explicit_zero_threshold_returns_all_related(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: source + unclassified related sharing an entity
+        source = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/rel-mc-zero-src",
+            title="Source",
+            full_text="Content.",
+        )
+        other = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/rel-mc-zero-other",
+            title="Other",
+            full_text="Content.",
+        )
+        entity = await create_test_entity(
+            db_connection, name="RelMcZeroEntity", normalized_name="rel-mc-zero-entity"
+        )
+        await create_test_article_entity(db_connection, source.id, entity.id)
+        await create_test_article_entity(db_connection, other.id, entity.id)
+        service = ArticleSearchService(cache=None)
+
+        # When: we fetch related with min_confidence=0.0
+        results = await service.get_related_articles(
+            db_connection, source.public_id, min_confidence=0.0
+        )
+
+        # Then: unclassified related article is returned
+        urls = [r.url for r in results]
+        assert "https://example.com/rel-mc-zero-other" in urls
+
+    async def test_cache_key_separates_thresholds(
+        self,
+        db_connection: asyncpg.Connection,
+    ):
+        # Given: source + one classified related sharing an entity, with cache
+        source = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/rel-mc-ck-src",
+            title="Source",
+            full_text="Content.",
+        )
+        other = await _insert_article_with_text(
+            db_connection,
+            url="https://example.com/rel-mc-ck-other",
+            title="Other",
+            full_text="Content.",
+        )
+        await _insert_classification(db_connection, other.id, confidence_score=0.95)
+        entity = await create_test_entity(
+            db_connection, name="RelMcCkEntity", normalized_name="rel-mc-ck-entity"
+        )
+        await create_test_article_entity(db_connection, source.id, entity.id)
+        await create_test_article_entity(db_connection, other.id, entity.id)
+        cache = InMemoryCache()
+        service = ArticleSearchService(cache=cache)
+
+        # When: we call with two different thresholds
+        await service.get_related_articles(db_connection, source.public_id, min_confidence=0.5)
+        await service.get_related_articles(db_connection, source.public_id, min_confidence=0.9)
+
+        # Then: two separate cache entries exist
+        assert cache.size() == 2

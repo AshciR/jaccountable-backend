@@ -101,6 +101,7 @@ JOIN news_sources ns ON a.news_source_id = ns.id
 LEFT JOIN article_classifications ac ON a.id = ac.article_id
 LEFT JOIN article_entities ae ON a.id = ae.article_id
 LEFT JOIN entities e ON ae.entity_id = e.id
+WHERE COALESCE(ac.max_confidence, 0) >= :min_confidence
 GROUP BY a.id, a.public_id, a.url, a.title, a.section, a.published_date,
          a.full_text, ns.id, ac.classifications, ac.max_confidence, rs.shared_entity_count
 ORDER BY rs.shared_entity_count DESC, COALESCE(ac.max_confidence, 0) DESC, a.published_date DESC

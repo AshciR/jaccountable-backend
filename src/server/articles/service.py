@@ -46,6 +46,7 @@ class ArticleSearchService:
                 page_size=params.page_size,
                 sort=params.sort,
                 order=params.order,
+                min_confidence=params.min_confidence,
             )
 
         # Check if cache results are available
@@ -64,6 +65,7 @@ class ArticleSearchService:
             page_size=params.page_size,
             sort=params.sort,
             order=params.order,
+            min_confidence=params.min_confidence,
         )
         await self._set_cached(params, results, total)
 
@@ -97,17 +99,22 @@ class ArticleSearchService:
         conn: asyncpg.Connection,
         public_id: UUID,
         limit: int = 5,
+        min_confidence: float = 0.8,
     ) -> list[ArticleSearchResult]:
         """Return articles related to the given article by shared entities."""
         if self._cache is None:
-            return await self._repo.get_related_articles_by_public_id(conn, public_id, limit=limit)
+            return await self._repo.get_related_articles_by_public_id(
+                conn, public_id, limit=limit, min_confidence=min_confidence
+            )
 
-        cache_key = f"article:related:{public_id}:limit={limit}"
+        cache_key = f"article:related:{public_id}:limit={limit}:mc={min_confidence}"
         raw = await self._cache.get(cache_key)
         if raw:
             return [ArticleSearchResult.model_validate(r) for r in json.loads(raw)]
 
-        results = await self._repo.get_related_articles_by_public_id(conn, public_id, limit=limit)
+        results = await self._repo.get_related_articles_by_public_id(
+            conn, public_id, limit=limit, min_confidence=min_confidence
+        )
         await self._cache.set(
             cache_key,
             json.dumps([r.model_dump(mode="json") for r in results]),
@@ -155,5 +162,6 @@ class ArticleSearchService:
             f"o={params.order}:"
             f"fd={params.from_date}:"
             f"td={params.to_date}:"
-            f"ft={params.include_full_text}"
+            f"ft={params.include_full_text}:"
+            f"mc={params.min_confidence}"
         )

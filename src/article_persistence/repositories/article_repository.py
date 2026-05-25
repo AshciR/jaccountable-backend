@@ -158,6 +158,7 @@ class ArticleRepository:
         conn: asyncpg.Connection,
         public_id: UUID,
         limit: int = 5,
+        min_confidence: float = 0.8,
     ) -> list[ArticleSearchResult]:
         """Retrieve articles related to the given article by shared entities.
 
@@ -175,7 +176,7 @@ class ArticleRepository:
             or the public_id does not exist.
         """
         rows = await self.queries.get_related_articles_by_public_id(
-            conn, public_id=public_id, limit=limit
+            conn, public_id=public_id, limit=limit, min_confidence=min_confidence
         )
         return [_row_to_search_result(row) for row in rows]
 
@@ -190,6 +191,7 @@ class ArticleRepository:
         page_size: int = 20,
         sort: str = "relevance",
         order: str = "desc",
+        min_confidence: float = 0.8,
     ) -> tuple[list[ArticleSearchResult], int]:
         """Search articles using full-text search and/or entity name matching.
 
@@ -211,6 +213,7 @@ class ArticleRepository:
             page_size: Number of results per page.
             sort: "relevance" (ts_rank, only meaningful with q) or "published_date".
             order: "asc" or "desc" sort direction (applies to published_date sort).
+            min_confidence: the minimum confidence allowed
 
         Returns:
             Tuple of (results, total_count) where total_count is the count of all
@@ -241,6 +244,7 @@ class ArticleRepository:
             article_classifications AS (
                 SELECT
                     article_id,
+                    MAX(confidence_score) AS max_confidence,
                     jsonb_agg(jsonb_build_object(
                         'classifier_type', classifier_type,
                         'confidence_score', confidence_score,
@@ -298,10 +302,12 @@ class ArticleRepository:
         if to_date is not None:
             where_parts.append(f"a.published_date <= {track_param_count(to_date)}")
 
+        where_parts.append(f"COALESCE(ac.max_confidence, 0) >= {track_param_count(min_confidence)}")
+
         where_sql = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
         # --- GROUP BY ---
-        group_by = "GROUP BY a.id, a.public_id, a.url, a.title, a.section, a.published_date, a.full_text, ns.id, ac.classifications"
+        group_by = "GROUP BY a.id, a.public_id, a.url, a.title, a.section, a.published_date, a.full_text, ns.id, ac.classifications, ac.max_confidence"
         if use_fts:
             group_by += ", query"
 

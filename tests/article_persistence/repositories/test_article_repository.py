@@ -451,7 +451,7 @@ class TestGetRelatedArticlesHappyPath:
         repo = ArticleRepository()
 
         # When: related articles are fetched for the source article
-        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, min_confidence=0.0)
 
         # Then: the other article appears in the results
         result_ids = [r.public_id for r in results]
@@ -481,7 +481,7 @@ class TestGetRelatedArticlesHappyPath:
         repo = ArticleRepository()
 
         # When: related articles are fetched
-        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, min_confidence=0.0)
 
         # Then: article_a (2 shared entities) ranks above article_b (1 shared entity)
         result_ids = [r.public_id for r in results]
@@ -510,7 +510,7 @@ class TestGetRelatedArticlesHappyPath:
         repo = ArticleRepository()
 
         # When: related articles are fetched for the source article
-        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, min_confidence=0.0)
 
         # Then: related articles from both news sources are returned
         result_ids = {r.public_id for r in results}
@@ -526,7 +526,7 @@ class TestGetRelatedArticlesHappyPath:
         repo = ArticleRepository()
 
         # When: related articles are fetched
-        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, min_confidence=0.0)
 
         # Then: empty list returned
         assert results == []
@@ -545,7 +545,7 @@ class TestGetRelatedArticlesHappyPath:
         repo = ArticleRepository()
 
         # When: related articles are fetched for the source article
-        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id)
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, min_confidence=0.0)
 
         # Then: empty list returned since no entities are shared
         assert results == []
@@ -566,7 +566,7 @@ class TestGetRelatedArticlesHappyPath:
         repo = ArticleRepository()
 
         # When: related articles are fetched with limit=5
-        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, limit=5)
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, limit=5, min_confidence=0.0)
 
         # Then: at most 5 results returned
         assert len(results) == 5
@@ -608,7 +608,7 @@ class TestGetRelatedArticlesOrdering:
         repo = ArticleRepository()
 
         # When: related articles are fetched
-        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, limit=10)
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, limit=10, min_confidence=0.0)
 
         # Then: order is A (2 entities) → B (1 entity, high conf) → C (1 entity, low conf, older)
         result_ids = [r.public_id for r in results]
@@ -633,7 +633,7 @@ class TestGetRelatedArticlesOrdering:
         repo = ArticleRepository()
 
         # When: related articles are fetched
-        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, limit=10)
+        results = await repo.get_related_articles_by_public_id(db_connection, source.public_id, limit=10, min_confidence=0.0)
 
         # Then: classified article appears before the unclassified one
         result_ids = [r.public_id for r in results]
@@ -652,7 +652,7 @@ class TestGetRelatedArticlesEdgeCases:
         repo = ArticleRepository()
 
         # When: related articles are fetched for the nonexistent id
-        results = await repo.get_related_articles_by_public_id(db_connection, nonexistent_id)
+        results = await repo.get_related_articles_by_public_id(db_connection, nonexistent_id, min_confidence=0.0)
 
         # Then: empty list returned (not an error)
         assert results == []

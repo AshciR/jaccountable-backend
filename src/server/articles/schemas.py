@@ -20,6 +20,7 @@ class ArticleSearchParams(BaseModel):
     page_size: int = Field(20, ge=1, le=100)
     sort: Literal["relevance", "published_date"] = "relevance"
     order: Literal["asc", "desc"] = "desc"
+    min_confidence: float = Field(0.8, ge=0.0, le=1.0)
 
 
 class SearchClassificationSchema(BaseModel):
