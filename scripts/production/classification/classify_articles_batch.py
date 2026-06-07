@@ -937,6 +937,17 @@ async def main() -> int:
 
                 print_completion_summary(stats, args.output_dir, file_stem, log_file)
 
+                # Backstop: if more than half the processed articles produced a
+                # classification error, treat the run as failed even when no
+                # exception bubbled up (e.g. provider returned malformed output
+                # for every request).
+                if stats.processed > 0 and stats.classification_errors / stats.processed > 0.5:
+                    logger.error(
+                        f"Classification error rate {stats.classification_errors}/{stats.processed} "
+                        f"({stats.classification_errors / stats.processed:.0%}) exceeded 50% threshold"
+                    )
+                    exit_code = 1
+
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
         exit_code = 1

@@ -12,6 +12,7 @@ from loguru import logger
 from src.article_classification.agents.normalization_agent import normalization_agent
 from src.article_classification.models import NormalizedEntity
 from src.article_classification.base import APP_NAME, EntityCache
+from src.article_classification.utils import strip_code_fence
 
 
 class EntityNormalizerService:
@@ -81,7 +82,7 @@ class EntityNormalizerService:
         response = await self._call_agent_async(prompt, session.user_id, session.id)
 
         # Parse JSON response
-        result = json.loads(response)
+        result = json.loads(strip_code_fence(response))
 
         # Convert to NormalizedEntity objects
         normalized: list[NormalizedEntity] = []

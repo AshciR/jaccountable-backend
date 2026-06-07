@@ -1,6 +1,7 @@
 """Utility functions for classification results."""
 import asyncio
 import random
+import re
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
@@ -9,6 +10,23 @@ from loguru import logger
 from .models import ClassificationResult
 
 T = TypeVar("T")
+
+# Anthropic models wrap JSON output in ```json ... ``` markdown fences by
+# default; OpenAI's response_format=json_object stripped these automatically.
+_CODE_FENCE_PATTERN = re.compile(r"^\s*```(?:json)?\s*\n?(.*?)\n?\s*```\s*$", re.DOTALL)
+
+
+def strip_code_fence(text: str) -> str:
+    """Strip a surrounding ```json ... ``` (or plain ``` ... ```) fence.
+
+    Returns the input stripped of whitespace when no complete fence is present,
+    so a malformed half-fence falls through to the downstream JSON parser with
+    a useful error rather than silently producing a partial strip.
+    """
+    match = _CODE_FENCE_PATTERN.match(text)
+    if match:
+        return match.group(1).strip()
+    return text.strip()
 
 
 def filter_relevant_classifications(

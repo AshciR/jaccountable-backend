@@ -70,7 +70,7 @@ jobs:
       - name: Run integration tests
         run: uv run pytest tests/ -v --log-cli-level=INFO -n auto --dist loadfile -m integration --force-sugar
         env:
-          OPENAI_CLASSIFICATION_API_KEY: ${{ secrets.OPENAI_CI }}
+          ANTHROPIC_CLASSIFICATION_API_KEY: ${{ secrets.ANTHROPIC_CI }}
           OPENAI_EXTRACTOR_API_KEY: ${{ secrets.OPENAI_CI }}
 
   # ---
