@@ -3,6 +3,11 @@ import asyncio
 import time
 
 import pytest
+from litellm.exceptions import (
+    APIConnectionError,
+    AuthenticationError,
+    RateLimitError,
+)
 
 from src.article_classification.models import (
     ClassificationInput,
@@ -85,6 +90,21 @@ class FailingClassifier:
         raise ValueError(self.error_message)
 
 
+class FatalProviderErrorClassifier:
+    """Mock classifier that raises a fatal litellm provider exception.
+
+    Simulates the production failure mode where retry_with_backoff has exhausted
+    its attempts and re-raised the underlying litellm error (auth / quota /
+    connection). Service is expected to propagate these.
+    """
+
+    def __init__(self, exception: Exception):
+        self.exception = exception
+
+    async def classify(self, article: ClassificationInput, max_text_chars: int | None = None) -> ClassificationResult:
+        raise self.exception
+
+
 @pytest.fixture
 def mock_corruption_classifier() -> MockCorruptionClassifier:
     """Mock corruption classifier."""
@@ -101,6 +121,42 @@ def mock_hurricane_classifier() -> MockHurricaneClassifier:
 def failing_classifier() -> FailingClassifier:
     """Mock classifier that raises exception."""
     return FailingClassifier()
+
+
+@pytest.fixture
+def rate_limit_classifier() -> FatalProviderErrorClassifier:
+    """Mock classifier that raises litellm RateLimitError (e.g. quota exhausted)."""
+    return FatalProviderErrorClassifier(
+        RateLimitError(
+            message="You exceeded your current quota",
+            llm_provider="anthropic",
+            model="claude-sonnet-4-6",
+        )
+    )
+
+
+@pytest.fixture
+def authentication_error_classifier() -> FatalProviderErrorClassifier:
+    """Mock classifier that raises litellm AuthenticationError (e.g. bad API key)."""
+    return FatalProviderErrorClassifier(
+        AuthenticationError(
+            message="Invalid API key",
+            llm_provider="anthropic",
+            model="claude-sonnet-4-6",
+        )
+    )
+
+
+@pytest.fixture
+def api_connection_error_classifier() -> FatalProviderErrorClassifier:
+    """Mock classifier that raises litellm APIConnectionError (e.g. network outage)."""
+    return FatalProviderErrorClassifier(
+        APIConnectionError(
+            message="Could not connect to provider",
+            llm_provider="anthropic",
+            model="claude-sonnet-4-6",
+        )
+    )
 
 
 class TestClassificationServiceMultipleClassifiers:
@@ -219,6 +275,102 @@ class TestClassificationServiceErrorHandling:
 
         # Then: Returns empty list
         assert len(results) == 0
+
+
+class TestClassificationServiceFatalProviderErrors:
+    """Verify that fatal provider errors propagate so the batch job fails loud.
+
+    These cover the regression that caused 4 days of silently-failing
+    classification runs: when OpenAI returned quota-exhausted errors for every
+    article, the service swallowed them and the workflow exited 0.
+    """
+
+    async def test_rate_limit_error_propagates(
+        self,
+        sample_corruption_article: ClassificationInput,
+        rate_limit_classifier: FatalProviderErrorClassifier,
+    ):
+        # Given: A classifier whose retries have exhausted and raised RateLimitError
+        service = ClassificationService(classifiers=[rate_limit_classifier])
+
+        # When/Then: classify() re-raises so the caller can fail the batch
+        with pytest.raises(RateLimitError):
+            await service.classify(sample_corruption_article)
+
+    async def test_authentication_error_propagates(
+        self,
+        sample_corruption_article: ClassificationInput,
+        authentication_error_classifier: FatalProviderErrorClassifier,
+    ):
+        # Given: A classifier that raises AuthenticationError (bad / missing key)
+        service = ClassificationService(classifiers=[authentication_error_classifier])
+
+        # When/Then: classify() re-raises
+        with pytest.raises(AuthenticationError):
+            await service.classify(sample_corruption_article)
+
+    async def test_api_connection_error_propagates(
+        self,
+        sample_corruption_article: ClassificationInput,
+        api_connection_error_classifier: FatalProviderErrorClassifier,
+    ):
+        # Given: A classifier that raises APIConnectionError after retries
+        service = ClassificationService(classifiers=[api_connection_error_classifier])
+
+        # When/Then: classify() re-raises
+        with pytest.raises(APIConnectionError):
+            await service.classify(sample_corruption_article)
+
+    async def test_fatal_error_propagates_even_when_other_classifier_succeeds(
+        self,
+        sample_corruption_article: ClassificationInput,
+        mock_corruption_classifier: MockCorruptionClassifier,
+        rate_limit_classifier: FatalProviderErrorClassifier,
+    ):
+        # Given: One classifier hits a quota error, another would have succeeded
+        service = ClassificationService(
+            classifiers=[rate_limit_classifier, mock_corruption_classifier]
+        )
+
+        # When/Then: The successful result is discarded — a quota-exhausted run
+        # is a failed run, full stop. Better to fail loud than store a partial result.
+        with pytest.raises(RateLimitError):
+            await service.classify(sample_corruption_article)
+
+    async def test_fatal_error_takes_precedence_over_non_fatal_error(
+        self,
+        sample_corruption_article: ClassificationInput,
+        failing_classifier: FailingClassifier,
+        rate_limit_classifier: FatalProviderErrorClassifier,
+    ):
+        # Given: One classifier raises a tolerable ValueError, another raises fatal
+        service = ClassificationService(
+            classifiers=[failing_classifier, rate_limit_classifier]
+        )
+
+        # When/Then: Fatal wins — non-fatal exceptions don't mask it
+        with pytest.raises(RateLimitError):
+            await service.classify(sample_corruption_article)
+
+    async def test_non_fatal_value_error_still_swallowed(
+        self,
+        sample_corruption_article: ClassificationInput,
+        mock_corruption_classifier: MockCorruptionClassifier,
+        failing_classifier: FailingClassifier,
+    ):
+        # Given: A non-litellm exception (e.g. parser error on one article)
+        service = ClassificationService(
+            classifiers=[failing_classifier, mock_corruption_classifier]
+        )
+
+        # When: Classifying
+        results = await service.classify(sample_corruption_article)
+
+        # Then: Per-article failure is tolerated; successful classifier's result
+        # is returned. Only provider-level outages halt the batch.
+        assert len(results) == 1
+        assert results[0].classifier_type == ClassifierType.CORRUPTION
+
 
 class TestClassificationServiceEdgeCases:
     """Test edge cases and boundary conditions."""

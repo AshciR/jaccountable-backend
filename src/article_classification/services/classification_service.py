@@ -1,9 +1,20 @@
 """Classification service that orchestrates article classification."""
 import asyncio
 from loguru import logger
+from litellm.exceptions import (
+    APIConnectionError,
+    AuthenticationError,
+    RateLimitError,
+)
 
 from src.article_classification.base import ArticleClassifier
 from src.article_classification.models import ClassificationInput, ClassificationResult
+
+# Provider-level failures that mean the entire run cannot succeed (exhausted
+# credits, bad API key, network outage that survived all retries). These must
+# propagate so the batch script exits non-zero instead of silently classifying
+# every article as "no result".
+FATAL_PROVIDER_ERRORS = (AuthenticationError, RateLimitError, APIConnectionError)
 
 
 class ClassificationService:
@@ -80,16 +91,23 @@ class ClassificationService:
             return_exceptions=True,
         )
 
-        # Filter out exceptions and log them
         classified_results = []
         for i, result in enumerate(results):
+            classifier_name = self.classifiers[i].__class__.__name__
+
+            if isinstance(result, FATAL_PROVIDER_ERRORS):
+                logger.error(
+                    f"Classifier {classifier_name} hit fatal provider error for article {article.url}: "
+                    f"{type(result).__name__}: {result}"
+                )
+                raise result
+
             if isinstance(result, Exception):
-                # Log classifier failure with details
-                classifier_name = self.classifiers[i].__class__.__name__
                 logger.warning(
                     f"Classifier {classifier_name} failed for article {article.url}: {type(result).__name__}: {result}"
                 )
                 continue
+
             classified_results.append(result)
 
         return classified_results

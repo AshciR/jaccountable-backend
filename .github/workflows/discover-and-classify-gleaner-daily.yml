@@ -1,10 +1,10 @@
-name: Discover & Classify Observer Daily Articles
+name: Discover & Classify Gleaner Daily Articles
 
 on:
   schedule:
-    - cron: "30 13 * * *"  # 8:30 am JST (UTC-5), 1 hour after Gleaner
-    - cron: "30 18 * * *"  # 1:30 pm JST (UTC-5), 1 hour after Gleaner
-    - cron: "30 00 * * *"  # 7:30 pm JST (UTC-5), 1 hour after Gleaner
+    - cron: "30 12 * * *"  # 7:30 am JST (UTC-5)
+    - cron: "30 17 * * *"  # 12:30 pm JST (UTC-5)
+    - cron: "30 23 * * *"  # 6:30 pm JST (UTC-5)
   workflow_dispatch:
     inputs:
       environment:
@@ -18,7 +18,7 @@ on:
 
 jobs:
   discover-and-classify:
-    name: Discover & classify Observer [${{ inputs.environment || vars.CRON_ENVIRONMENT || 'staging' }}]
+    name: Discover & classify [${{ inputs.environment || vars.CRON_ENVIRONMENT || 'staging' }}]
     runs-on: ubuntu-latest
 
     env:
@@ -47,7 +47,7 @@ jobs:
             echo "S3_REGION=${{ secrets.PROD_S3_REGION }}" >> $GITHUB_ENV
             echo "S3_BUCKET=${{ secrets.PROD_S3_BUCKET }}" >> $GITHUB_ENV
             echo "DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}" >> $GITHUB_ENV
-            echo "OPENAI_CLASSIFICATION_API_KEY=${{ secrets.PROD_OPENAI_CLASSIFICATION_API_KEY }}" >> $GITHUB_ENV
+            echo "ANTHROPIC_CLASSIFICATION_API_KEY=${{ secrets.PROD_ANTHROPIC_CLASSIFICATION_API_KEY }}" >> $GITHUB_ENV
           else
             echo "S3_ENDPOINT_URL=${{ secrets.STAGING_S3_ENDPOINT_URL }}" >> $GITHUB_ENV
             echo "S3_ACCESS_KEY_ID=${{ secrets.STAGING_S3_ACCESS_KEY_ID }}" >> $GITHUB_ENV
@@ -55,18 +55,18 @@ jobs:
             echo "S3_REGION=${{ secrets.STAGING_S3_REGION }}" >> $GITHUB_ENV
             echo "S3_BUCKET=${{ secrets.STAGING_S3_BUCKET }}" >> $GITHUB_ENV
             echo "DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }}" >> $GITHUB_ENV
-            echo "OPENAI_CLASSIFICATION_API_KEY=${{ secrets.STAGING_OPENAI_CLASSIFICATION_API_KEY }}" >> $GITHUB_ENV
+            echo "ANTHROPIC_CLASSIFICATION_API_KEY=${{ secrets.STAGING_ANTHROPIC_CLASSIFICATION_API_KEY }}" >> $GITHUB_ENV
           fi
 
       - name: Run discovery
         run: |
-          PYTHONPATH=. uv run python scripts/production/discovery/discover_observer_daily_articles_via_rss.py \
+          PYTHONPATH=. uv run python scripts/production/discovery/discover_gleaner_daily_articles_via_rss.py \
             --skip-existing
 
       - name: Run classification
         run: |
           PYTHONPATH=. uv run python scripts/production/classification/classify_articles_batch.py \
-            --news-source observer \
-            --input scripts/production/discovery/output/observer_daily_discovery_????-??-??_??-??-??.jsonl \
+            --news-source gleaner \
+            --input scripts/production/discovery/output/gleaner_daily_discovery_????-??-??_??-??-??.jsonl \
             --skip-existing \
             --concurrency 4

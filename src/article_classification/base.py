@@ -8,9 +8,9 @@ from .models import ClassificationInput, ClassificationResult, NormalizedEntity
 load_dotenv()
 
 APP_NAME = "jaccountable_backend"
-CLASSIFICATION_MODEL = "openai/gpt-5.4-nano"
-NORMALIZATION_MODEL = "openai/gpt-5.4-nano"
-CLASSIFICATION_API_KEY = os.getenv("OPENAI_CLASSIFICATION_API_KEY")
+CLASSIFICATION_MODEL = "anthropic/claude-haiku-4-5"
+NORMALIZATION_MODEL = "anthropic/claude-haiku-4-5"
+CLASSIFICATION_API_KEY = os.getenv("ANTHROPIC_CLASSIFICATION_API_KEY")
 
 class ArticleClassifier(Protocol):
     """

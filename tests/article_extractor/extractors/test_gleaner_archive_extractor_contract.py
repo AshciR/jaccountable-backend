@@ -33,7 +33,7 @@ class TestGleanerArchiveExtractorExternalContract:
         - Date extraction works (from URL pattern)
         - Full text extraction works (from OCR sections)
 
-        Note: This test makes real LLM API calls and requires OPENAI_CLASSIFICATION_API_KEY.
+        Note: This test makes real LLM API calls and requires OPENAI_EXTRACTOR_API_KEY.
         """
         # Given: Known live Gleaner archive page (Nov 7, 2021, page 5 - Ruel Reid article)
         url = "https://gleaner.newspaperarchive.com/kingston-gleaner/2021-11-07/page-5/"

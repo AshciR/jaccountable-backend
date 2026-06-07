@@ -14,6 +14,7 @@ from src.article_classification.base import APP_NAME, NORMALIZATION_MODEL
 from src.article_classification.models import (
     EntityNormalizationResult,
 )
+from src.article_classification.utils import strip_code_fence
 
 
 @pytest.fixture
@@ -102,7 +103,7 @@ class TestNormalizationAgentIntegration:
         response = await call_agent_async(query, runner, session.user_id, session.id)
 
         # Then: Returns normalized entity with underscores
-        result = EntityNormalizationResult.model_validate_json(response)
+        result = EntityNormalizationResult.model_validate_json(strip_code_fence(response))
         assert isinstance(result, EntityNormalizationResult)
         assert len(result.normalized_entities) == 1
         entity = result.normalized_entities[0]
@@ -126,7 +127,7 @@ class TestNormalizationAgentIntegration:
         response = await call_agent_async(query, runner, session.user_id, session.id)
 
         # Then: Returns acronym in lowercase
-        result = EntityNormalizationResult.model_validate_json(response)
+        result = EntityNormalizationResult.model_validate_json(strip_code_fence(response))
         assert len(result.normalized_entities) == 1
         entity = result.normalized_entities[0]
         assert entity.original_value == "OCG"
@@ -147,7 +148,7 @@ class TestNormalizationAgentIntegration:
         response = await call_agent_async(query, runner, session.user_id, session.id)
 
         # Then: Returns standardized ministry name with underscores
-        result = EntityNormalizationResult.model_validate_json(response)
+        result = EntityNormalizationResult.model_validate_json(strip_code_fence(response))
         assert len(result.normalized_entities) == 1
         entity = result.normalized_entities[0]
         assert entity.original_value == "Ministry of Education"
@@ -168,7 +169,7 @@ class TestNormalizationAgentIntegration:
         response = await call_agent_async(query, runner, session.user_id, session.id)
 
         # Then: All entities normalized correctly
-        result = EntityNormalizationResult.model_validate_json(response)
+        result = EntityNormalizationResult.model_validate_json(strip_code_fence(response))
         assert len(result.normalized_entities) == 4
 
         # Build a dict for easier lookup (original_value -> normalized_value)
@@ -199,7 +200,7 @@ class TestNormalizationAgentIntegration:
         response = await call_agent_async(query, runner, session.user_id, session.id)
 
         # Then: All titles removed, names normalized with underscores
-        result = EntityNormalizationResult.model_validate_json(response)
+        result = EntityNormalizationResult.model_validate_json(strip_code_fence(response))
         assert len(result.normalized_entities) == 4
 
         # Build a dict for easier lookup

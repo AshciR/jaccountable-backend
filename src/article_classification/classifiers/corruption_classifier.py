@@ -13,7 +13,7 @@ from src.article_classification.models import (
 )
 from src.article_classification.agents.corruption_agent import corruption_classifier
 from src.article_classification.base import APP_NAME
-from src.article_classification.utils import retry_with_backoff
+from src.article_classification.utils import retry_with_backoff, strip_code_fence
 
 
 class CorruptionClassifier:
@@ -102,7 +102,9 @@ class CorruptionClassifier:
         )
 
         # Parse JSON response to ClassificationResult
-        result: ClassificationResult = ClassificationResult.model_validate_json(response)
+        result: ClassificationResult = ClassificationResult.model_validate_json(
+            strip_code_fence(response)
+        )
 
         return result
 
