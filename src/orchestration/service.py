@@ -4,6 +4,7 @@ Orchestration service for article processing pipeline.
 Coordinates the full workflow: Extract → Classify → Filter → Store
 """
 import time
+from datetime import datetime
 
 import asyncpg
 from loguru import logger
@@ -127,6 +128,7 @@ class PipelineOrchestrationService:
         min_confidence: float = 0.7,
         max_text_chars: int = 4000,
         conn: asyncpg.Connection | None = None,
+        fallback_published_date: datetime | None = None,
     ) -> OrchestrationResult:
         """
         Process an article through the full pipeline: Extract → Classify → Store.
@@ -145,6 +147,9 @@ class PipelineOrchestrationService:
                   lazily inside _step_store and released immediately after storing.
                   Pass explicitly to control the transaction lifecycle (e.g. dry-run
                   rollback or when the caller manages connection scope).
+            fallback_published_date: Date to use when the extractor finds no
+                  published date on the page (e.g. the date from discovery via
+                  RSS/sitemap/URL). Ignored when the extractor finds one.
 
         Returns:
             OrchestrationResult with processing outcome and metadata
@@ -184,6 +189,16 @@ class PipelineOrchestrationService:
             if not success:
                 return result  # type: ignore
             extracted: ExtractedArticleContent = result  # type: ignore
+
+            if extracted.published_date is None and fallback_published_date is not None:
+                extracted = extracted.model_copy(
+                    update={"published_date": fallback_published_date}
+                )
+                telemetry["published_date_source"] = "fallback"
+            elif extracted.published_date is not None:
+                telemetry["published_date_source"] = "extracted"
+            else:
+                telemetry["published_date_source"] = "missing"
 
             # Step 2: Convert to classification input
             success, result = self._step_convert(

@@ -1,0 +1,73 @@
+name: Backfill Gleaner Published Dates
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+      dry_run:
+        description: "Dry run (roll back all changes)"
+        required: true
+        default: true
+        type: boolean
+      limit:
+        description: "Max articles to process (blank = all)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  backfill:
+    name: Backfill published dates [${{ inputs.environment }}${{ inputs.dry_run && ', dry run' || '' }}]
+    runs-on: ubuntu-latest
+
+    env:
+      TARGET_ENV: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.8"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Set environment secrets
+        run: |
+          if [ "$TARGET_ENV" = "production" ]; then
+            echo "DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}" >> $GITHUB_ENV
+          else
+            echo "DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }}" >> $GITHUB_ENV
+          fi
+
+      - name: Run backfill
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          ARGS=()
+          if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
+          if [ -n "$LIMIT" ]; then ARGS+=(--limit "$LIMIT"); fi
+          PYTHONPATH=. uv run python scripts/production/classification/backfill_published_dates.py "${ARGS[@]}"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backfill-published-dates-${{ inputs.environment }}-${{ github.run_id }}
+          path: |
+            scripts/production/classification/output/backfill_results/
+            scripts/production/classification/output/logs/
+          if-no-files-found: ignore

@@ -594,6 +594,65 @@ class TestGleanerExtractorV2JsonLdParsing:
         assert json_ld["@type"] == "Article"
         assert json_ld["headline"] == "The Article"
 
+    async def test_news_article_type_extracts_published_date(self):
+        # Given: HTML with JSON-LD typed "NewsArticle" (current Gleaner markup)
+        # and no meta/time date fallbacks
+        html = """
+        <html>
+            <head>
+                <script type="application/ld+json">
+                {
+                    "@context": "https://schema.org",
+                    "@type": "NewsArticle",
+                    "headline": "Mining ministry moves to overhaul regulation after audit findings",
+                    "datePublished": "2026-09-25T01:06:07-04:00"
+                }
+                </script>
+            </head>
+            <body>
+                <div class="article--body">
+                    <p>Article content with sufficient length to pass the validation check.</p>
+                </div>
+            </body>
+        </html>
+        """
+        extractor = GleanerExtractorV2()
+        url = "https://jamaica-gleaner.com/article/news/20260925/mining-ministry-moves-overhaul-regulation-after-audit-findings"
+
+        # When: extracting content
+        content = extractor.extract(html, url)
+
+        # Then: published_date comes from JSON-LD, normalized to UTC
+        assert content.published_date is not None
+        assert content.published_date.tzinfo == timezone.utc
+        assert content.published_date.isoformat() == "2026-09-25T05:06:07+00:00"
+
+    async def test_extract_json_ld_type_list_finds_article(self):
+        # Given: HTML with JSON-LD whose @type is a list
+        html = """
+        <html>
+            <head>
+                <script type="application/ld+json">
+                {
+                    "@context": "https://schema.org",
+                    "@type": ["NewsArticle", "CreativeWork"],
+                    "headline": "Listed Type"
+                }
+                </script>
+            </head>
+        </html>
+        """
+        extractor = GleanerExtractorV2()
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "lxml")
+
+        # When: extracting JSON-LD
+        json_ld = extractor._extract_json_ld(soup)
+
+        # Then: the block is recognized as an article
+        assert json_ld is not None
+        assert json_ld["headline"] == "Listed Type"
+
 
 class TestGleanerExtractorV2HtmlEntityDecoding:
     """HTML entity decoding in extracted titles."""

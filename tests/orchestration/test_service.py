@@ -1,5 +1,6 @@
 """Tests for PipelineOrchestrationService."""
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from src.orchestration.service import PipelineOrchestrationService
@@ -316,3 +317,85 @@ class TestProcessArticleEdgeCases:
         mock_persistence.store_article_with_classifications.assert_called_once()
         call_kwargs = mock_persistence.store_article_with_classifications.call_args.kwargs
         assert call_kwargs["conn"] is mock_conn
+
+
+class TestProcessArticleFallbackPublishedDate:
+    """Discovery date is used only when the extractor finds no published date."""
+
+    @staticmethod
+    def _build_service(extracted: ExtractedArticleContent) -> tuple[PipelineOrchestrationService, Mock]:
+        mock_extraction = Mock(spec=ArticleExtractionService)
+        mock_extraction.extract_article_content = AsyncMock(return_value=extracted)
+
+        mock_classification = Mock(spec=ClassificationService)
+        mock_classification.classify = AsyncMock(
+            return_value=[
+                ClassificationResult(
+                    is_relevant=True,
+                    confidence=0.9,
+                    reasoning="Corruption investigation involving government contract",
+                    classifier_type=ClassifierType.CORRUPTION,
+                    model_name="gpt-4o-mini",
+                    key_entities=["OCG"],
+                )
+            ]
+        )
+
+        mock_persistence = Mock(spec=PostgresArticlePersistenceService)
+        mock_persistence.store_article_with_classifications = AsyncMock(
+            return_value=ArticleStorageResult(
+                stored=True,
+                article_id=42,
+                classification_count=1,
+                article=None,
+                classifications=[],
+            )
+        )
+
+        service = PipelineOrchestrationService(
+            extraction_service=mock_extraction,
+            classification_service=mock_classification,
+            persistence_service=mock_persistence,
+        )
+        return service, mock_persistence
+
+    async def test_fallback_used_when_extractor_finds_no_date(
+        self,
+        sample_extracted_content: ExtractedArticleContent,
+    ):
+        # Given: extractor returns content with no published date
+        extracted = sample_extracted_content.model_copy(update={"published_date": None})
+        service, mock_persistence = self._build_service(extracted)
+        fallback = datetime(2026, 9, 25, tzinfo=timezone.utc)
+
+        # When: processing with a fallback date from discovery
+        await service.process_article(
+            conn=MagicMock(),
+            url="https://jamaica-gleaner.com/article/news/20260925/test",
+            section="news",
+            fallback_published_date=fallback,
+        )
+
+        # Then: the stored content carries the fallback date
+        call_kwargs = mock_persistence.store_article_with_classifications.call_args.kwargs
+        assert call_kwargs["extracted"].published_date == fallback
+
+    async def test_extracted_date_wins_over_fallback(
+        self,
+        sample_extracted_content: ExtractedArticleContent,
+    ):
+        # Given: extractor returns content with a published date
+        service, mock_persistence = self._build_service(sample_extracted_content)
+        fallback = datetime(2026, 9, 25, tzinfo=timezone.utc)
+
+        # When: processing with a different fallback date
+        await service.process_article(
+            conn=MagicMock(),
+            url="https://jamaica-gleaner.com/article/news/20251201/test",
+            section="news",
+            fallback_published_date=fallback,
+        )
+
+        # Then: the extracted date is kept
+        call_kwargs = mock_persistence.store_article_with_classifications.call_args.kwargs
+        assert call_kwargs["extracted"].published_date == sample_extracted_content.published_date
