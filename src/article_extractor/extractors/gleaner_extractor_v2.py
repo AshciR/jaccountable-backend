@@ -6,6 +6,10 @@ from bs4 import BeautifulSoup
 
 from src.article_extractor.models import ExtractedArticleContent
 
+# schema.org types accepted as the article JSON-LD block. The Gleaner currently
+# emits "NewsArticle"; older pages and test fixtures use "Article".
+ARTICLE_JSON_LD_TYPES = frozenset({"Article", "NewsArticle", "ReportageNewsArticle"})
+
 
 class GleanerExtractorV2:
     """
@@ -79,9 +83,13 @@ class GleanerExtractorV2:
         for script in json_ld_scripts:
             try:
                 data = json.loads(script.string)
-                # Look for Article type (could be multiple JSON-LD blocks)
-                if isinstance(data, dict) and data.get("@type") == "Article":
-                    return data
+                # Look for an Article type (could be multiple JSON-LD blocks).
+                # @type may be a string or a list of strings.
+                if isinstance(data, dict):
+                    json_ld_type = data.get("@type")
+                    types = json_ld_type if isinstance(json_ld_type, list) else [json_ld_type]
+                    if ARTICLE_JSON_LD_TYPES.intersection(t for t in types if isinstance(t, str)):
+                        return data
             except (json.JSONDecodeError, TypeError, AttributeError):
                 # Malformed JSON or missing content - continue to next script tag
                 continue

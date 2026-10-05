@@ -464,6 +464,7 @@ async def process_single_article(
                         news_source_id=article.news_source_id,
                         min_confidence=min_confidence,
                         max_text_chars=max_text_chars,
+                        fallback_published_date=article.published_date,
                     )
                 finally:
                     await tx.rollback()  # Always rollback in dry-run mode
@@ -475,6 +476,7 @@ async def process_single_article(
                 news_source_id=article.news_source_id,
                 min_confidence=min_confidence,
                 max_text_chars=max_text_chars,
+                fallback_published_date=article.published_date,
             )
 
         # Classify error if any
