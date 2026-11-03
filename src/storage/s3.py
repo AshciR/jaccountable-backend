@@ -25,6 +25,8 @@ def get_s3_client() -> BaseClient:
     """Build a boto3 S3 client from environment variables.
 
     Uses path-style addressing, which is required for LocalStack and Supabase Storage.
+    Timeouts are kept short and retries use botocore's "standard" mode (exponential
+    backoff with jitter) so a hung storage endpoint fails in about a minute instead of ~5.
 
     Raises:
         KeyError: If S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, or S3_SECRET_ACCESS_KEY are unset.
@@ -35,7 +37,12 @@ def get_s3_client() -> BaseClient:
         aws_access_key_id=os.environ["S3_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["S3_SECRET_ACCESS_KEY"],
         region_name=os.environ.get("S3_REGION", "us-east-1"),
-        config=Config(s3={"addressing_style": "path"}),
+        config=Config(
+            s3={"addressing_style": "path"},
+            connect_timeout=10,
+            read_timeout=30,
+            retries={"max_attempts": 3, "mode": "standard"},
+        ),
     )
 
 
